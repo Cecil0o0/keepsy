@@ -1,7 +1,7 @@
 # RFC Process
 
-This document describes the RFC process for the epsilon, and provides a way for the epsilon team and the wider community to have discussions about the features and direction of the big data product.
-这篇文档描述了 epsilon 征求意见稿的过程，并且为 epsilon 团队和更广泛的社区提供一条途径去讨论有关大数据产品的特性与方向。
+This document describes the RFC process for the epsilon, and provides a way for the epsilon team and the wider community to have discussions about the features and direction of the enterprise-level big data product.
+这篇文档描述了 epsilon 征求意见稿的过程，并且为 epsilon 团队和更广泛的社区提供一条途径去讨论有关企业级大数据产品的特性与方向。
 
 # What is an RFC?
 
