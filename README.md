@@ -2,7 +2,7 @@
 
 Keep your data private!
 
-Keepsy offers scalable unified storage layer for everyone to use across devices or cloud services with encrypted data transfer over the internet.
+Keepsy offers privacy-first scalable unified storage layer for everyone to use across devices or cloud services with encrypted data transfer over the internet.
 
 ## Goals
 
