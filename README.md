@@ -1,7 +1,11 @@
-# epsilon
+# Keepsy
 
-name `epsilon`, be inspired by delta-lake, pay respect to open source spirit and give next step based on `delta` according to the order of Greek letters.
+Keep your data private!
 
-## Summary
+Keepsy offers scalable distributed storage layer for everyone to use across devices or cloud services with crypto data transfer over the internet.
 
-An collection of implementations for a privacy-first enterprise-level AI-assist big data software including unified storage layer, distributed compute engine and productive editor user interface, written in zig and typescript.
+## Get Started
+
+```shell
+keepsy create.sql
+```
