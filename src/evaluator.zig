@@ -3,6 +3,8 @@ const DFATag = @import("./tokenizer.zig").DFATag;
 const DFA = @import("./tokenizer.zig").DFA;
 const SelectDFA = @import("./tokenizer.zig").SelectDFA;
 const FromDFA = @import("./tokenizer.zig").FromDFA;
+const ColumnDFA = @import("./tokenizer.zig").ColumnDFA;
+const TableDFA = @import("./tokenizer.zig").TableDFA;
 const LexicalCategory = enum {
     // Names assigned by the programmer
     identifier,
@@ -40,6 +42,12 @@ pub fn evaluate(dfa: DFA) EvaluateResult {
         },
         DFATag.double_quote_string => {
             return EvaluateResult{ .category = LexicalCategory.literal, .value = dfa.double_quote_string.value.items, .col = dfa.double_quote_string.col };
+        },
+        DFATag.column => {
+            return EvaluateResult{ .category = LexicalCategory.identifier, .value = dfa.column.value.items, .col = dfa.column.col };
+        },
+        DFATag.table => {
+            return EvaluateResult{ .category = LexicalCategory.identifier, .value = dfa.table.value.items, .col = dfa.table.col };
         },
     }
 }
