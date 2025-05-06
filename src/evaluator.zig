@@ -5,6 +5,8 @@ const SelectDFA = @import("./tokenizer.zig").SelectDFA;
 const FromDFA = @import("./tokenizer.zig").FromDFA;
 const ColumnDFA = @import("./tokenizer.zig").ColumnDFA;
 const TableDFA = @import("./tokenizer.zig").TableDFA;
+const OrderByDFA = @import("./tokenizer.zig").OrderByDFA;
+const OrderByItemDFA = @import("./tokenizer.zig").OrderByItemDFA;
 const LexicalCategory = enum {
     // Names assigned by the programmer
     identifier,
@@ -31,7 +33,6 @@ pub const EvaluateResult = struct {
 pub fn evaluate(dfa: DFA) EvaluateResult {
     switch (dfa) {
         DFATag.select => {
-            std.debug.print("{c} {} {}", .{ dfa.select.value[0..], @TypeOf(dfa.select.value[0..]), @TypeOf(dfa.select.value) });
             return EvaluateResult{ .category = LexicalCategory.keyword, .value = dfa.select.value[0..], .col = dfa.select.col };
         },
         DFATag.from => {
@@ -48,6 +49,12 @@ pub fn evaluate(dfa: DFA) EvaluateResult {
         },
         DFATag.table => {
             return EvaluateResult{ .category = LexicalCategory.identifier, .value = dfa.table.value.items, .col = dfa.table.col };
+        },
+        DFATag.order_by => {
+            return EvaluateResult{ .category = LexicalCategory.keyword, .value = dfa.order_by.value[0..], .col = dfa.order_by.col };
+        },
+        DFATag.order_by_item => {
+            return EvaluateResult{ .category = LexicalCategory.identifier, .value = dfa.order_by_item.value.items, .col = dfa.order_by_item.col };
         },
     }
 }

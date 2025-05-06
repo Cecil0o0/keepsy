@@ -217,8 +217,71 @@ pub const TableDFA = struct {
         return self.state;
     }
 };
-pub const DFATag = enum { select, from, star, double_quote_string, column, table };
-pub const DFA = union(DFATag) { select: SelectDFA, from: FromDFA, star: StarDFA, double_quote_string: DoubleQuoteStringDFA, column: ColumnDFA, table: TableDFA };
+pub const OrderByDFA = struct {
+    state: State = State.NULL,
+    value: [9]u8 = [9]u8{ 'a', 'a', 'a', 'a', 'a', ' ', 'a', 'a', ' ' },
+    pointer: u8 = 0,
+    col: [2]u32 = [2]u32{ 0, 0 },
+    fn transition(self: *OrderByDFA, c: u8) State {
+        switch (self.state) {
+            State.NULL => {
+                if (c == 'o') {
+                    self.state = State.START;
+                    self.value[self.pointer] = c;
+                    self.pointer += 1;
+                }
+            },
+            State.START => {
+                if (c == 'r') {
+                    self.state = State.ACCEPTING;
+                    self.value[self.pointer] = c;
+                    self.pointer += 1;
+                } else {
+                    self.pointer = 0;
+                }
+            },
+            State.ACCEPTING => {
+                if (c == ' ' and self.pointer == 8) {
+                    self.state = State.NULL;
+                    self.pointer = 0;
+                } else {
+                    self.value[self.pointer] = c;
+                    self.pointer += 1;
+                }
+            },
+            else => {},
+        }
+        return self.state;
+    }
+};
+pub const OrderByItemDFA = struct {
+    state: State = State.NULL,
+    value: std.ArrayList(u8) = std.ArrayList(u8).init(std.heap.page_allocator),
+    col: [2]u32 = [2]u32{ 0, 0 },
+    fn transition(self: *OrderByItemDFA, c: u8) !State {
+        switch (self.state) {
+            State.NULL => {
+                self.state = State.START;
+                try self.value.append(c);
+            },
+            State.START => {
+                self.state = State.ACCEPTING;
+                try self.value.append(c);
+            },
+            State.ACCEPTING => {
+                if (c == ' ' or c == ';') {
+                    self.state = State.NULL;
+                } else {
+                    try self.value.append(c);
+                }
+            },
+            else => {},
+        }
+        return self.state;
+    }
+};
+pub const DFATag = enum { select, from, star, double_quote_string, column, table, order_by, order_by_item };
+pub const DFA = union(DFATag) { select: SelectDFA, from: FromDFA, star: StarDFA, double_quote_string: DoubleQuoteStringDFA, column: ColumnDFA, table: TableDFA, order_by: OrderByDFA, order_by_item: OrderByItemDFA };
 const TokenizeError = error{StateFailed};
 const stderr = std.io.getStdErr().writer();
 const TokenizeResult = struct { original: []const u8, evaluations: std.ArrayList(EvaluateResult) };
@@ -235,11 +298,13 @@ fn scan(string: []const u8) !std.ArrayList(EvaluateResult) {
     var double_quote_dfa = DoubleQuoteStringDFA{};
     var column_dfa = ColumnDFA{};
     var table_dfa = TableDFA{};
+    var order_by_dfa = OrderByDFA{};
+    var order_by_item_dfa = OrderByItemDFA{};
     var i: u32 = 0;
     var evaluations = std.ArrayList(EvaluateResult).init(std.heap.page_allocator);
     while (i < string.len) {
         const c = string[i];
-        std.debug.print("\ntry to dispatch dfa '{c}'", .{c});
+        std.debug.print("\ntry to dispatch letter '{c}' to leading dfa of a statement.", .{c});
 
         // suspect select statement
         if (select_dfa.transition(c) == State.START) {
@@ -297,7 +362,6 @@ fn scan(string: []const u8) !std.ArrayList(EvaluateResult) {
 
             // suspect `from` segment
             if (from_dfa.transition(string[i]) == State.START) {
-                std.debug.print("\nhit from_dfa", .{});
                 from_dfa.col[0] = i;
                 var k = i + 1;
                 while (from_dfa.transition(string[k]) == State.ACCEPTING) {
@@ -311,7 +375,7 @@ fn scan(string: []const u8) !std.ArrayList(EvaluateResult) {
                     return TokenizeError.StateFailed;
                 } else {
                     from_dfa.col[1] = j;
-                    std.debug.print("\nfrom_dfa accepted: \x1B[32m{s}\x1B[0m", .{from_dfa.value});
+                    std.debug.print("\nfrom_dfa   accepted: \x1B[32m{s}\x1B[0m", .{from_dfa.value});
                     try evaluations.append(evaluate(DFA{ .from = from_dfa }));
                 }
             }
@@ -331,8 +395,43 @@ fn scan(string: []const u8) !std.ArrayList(EvaluateResult) {
                     return TokenizeError.StateFailed;
                 } else {
                     table_dfa.col[1] = k;
-                    std.debug.print("\ntable_dfa accepted: \x1B[32m{s}\x1B[0m", .{table_dfa.value.items});
+                    std.debug.print("\ntable_dfa  accepted: \x1B[32m{s}\x1B[0m", .{table_dfa.value.items});
                     try evaluations.append(evaluate(DFA{ .table = table_dfa }));
+                }
+            }
+
+            // suspect `order by` segment
+            if (order_by_dfa.transition(string[i]) == State.START) {
+                var k = i + 1;
+                while (order_by_dfa.transition(string[k]) == State.ACCEPTING) {
+                    k += 1;
+                }
+                // move i cursor
+                i = k + 1;
+                if (order_by_dfa.state == State.FAILED) {
+                    try stderr.print("\norder_by_dfa failed with: {s}\n", .{order_by_dfa.value});
+                    return TokenizeError.StateFailed;
+                } else {
+                    std.debug.print("\norder_by_dfa accepted: \x1B[32m{s}\x1B[0m", .{order_by_dfa.value});
+                    try evaluations.append(evaluate(DFA{ .order_by = order_by_dfa }));
+                }
+            }
+
+            // suspect `order by item` segment
+            if (try order_by_item_dfa.transition(string[i]) == State.START) {
+                var k = i + 1;
+                while (try order_by_item_dfa.transition(string[k]) == State.ACCEPTING) {
+                    k += 1;
+                }
+                // move i cursor
+                i = k + 1;
+                if (order_by_item_dfa.state == State.FAILED) {
+                    try stderr.print("\norder_by_item_dfa failed with: {s}\n", .{order_by_item_dfa.value.items});
+                    return TokenizeError.StateFailed;
+                } else {
+                    std.debug.print("\norder_by_item_dfa accepted: \x1B[32m{s}\x1B[0m", .{order_by_item_dfa.value.items});
+                    try evaluations.append(evaluate(DFA{ .order_by_item = order_by_item_dfa }));
+                    order_by_item_dfa.value.clearAndFree();
                 }
             }
         } else if (try double_quote_dfa.transition(c) == State.START) {
@@ -353,7 +452,7 @@ fn scan(string: []const u8) !std.ArrayList(EvaluateResult) {
                 try evaluations.append(evaluate(DFA{ .double_quote_string = double_quote_dfa }));
             }
         } else if (c == ' ') {
-            std.debug.print(" Leading whitespace character will be ignored for now.", .{});
+            std.debug.print("\nLeading whitespace character will be ignored for now.", .{});
             i += 1;
         } else {
             std.debug.print(" This letter don't match any defined dfa", .{});
@@ -399,7 +498,8 @@ test "Two statements in DQL" {
 test "full example" {
     const string =
         \\ select first_name, last_name, hire_date
-        \\ from employees;
+        \\ from employees
+        \\ order by hire_date;
     ;
     const result = try tokenize(string);
     try std.testing.expectEqualStrings(string, result.original);
