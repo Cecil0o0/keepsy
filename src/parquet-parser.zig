@@ -1,1 +1,1 @@
-/// A parser implmentation for Apache Parquet
+//! A parser implmentation for Apache Parquet
