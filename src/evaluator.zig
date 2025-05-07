@@ -7,6 +7,7 @@ const ColumnDFA = @import("./tokenizer.zig").ColumnDFA;
 const TableDFA = @import("./tokenizer.zig").TableDFA;
 const OrderByDFA = @import("./tokenizer.zig").OrderByDFA;
 const OrderByItemDFA = @import("./tokenizer.zig").OrderByItemDFA;
+const OrderByDirectionDFA = @import("./tokenizer.zig").OrderByDirectionDFA;
 const LexicalCategory = enum {
     // Names assigned by the programmer
     identifier,
@@ -55,6 +56,9 @@ pub fn evaluate(dfa: DFA) EvaluateResult {
         },
         DFATag.order_by_item => {
             return EvaluateResult{ .category = LexicalCategory.identifier, .value = dfa.order_by_item.value.items, .col = dfa.order_by_item.col };
+        },
+        DFATag.order_by_dir => {
+            return EvaluateResult{ .category = LexicalCategory.keyword, .value = dfa.order_by_dir.value[0..], .col = dfa.order_by_dir.col };
         },
     }
 }

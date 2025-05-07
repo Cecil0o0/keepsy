@@ -261,8 +261,10 @@ pub const OrderByItemDFA = struct {
     fn transition(self: *OrderByItemDFA, c: u8) !State {
         switch (self.state) {
             State.NULL => {
-                self.state = State.START;
-                try self.value.append(c);
+                if (c != ' ' and c != ';') {
+                    self.state = State.START;
+                    try self.value.append(c);
+                }
             },
             State.START => {
                 self.state = State.ACCEPTING;
@@ -280,9 +282,42 @@ pub const OrderByItemDFA = struct {
         return self.state;
     }
 };
-pub const DFATag = enum { select, from, star, double_quote_string, column, table, order_by, order_by_item };
-pub const DFA = union(DFATag) { select: SelectDFA, from: FromDFA, star: StarDFA, double_quote_string: DoubleQuoteStringDFA, column: ColumnDFA, table: TableDFA, order_by: OrderByDFA, order_by_item: OrderByItemDFA };
-const TokenizeError = error{StateFailed};
+pub const OrderByDirectionDFA = struct {
+    state: State = State.NULL,
+    value: [4]u8 = [4]u8{ ' ', ' ', ' ', ' ' },
+    pointer: u8 = 0,
+    col: [2]u32 = [2]u32{ 0, 0 },
+    fn transition(self: *OrderByDirectionDFA, c: u8) State {
+        switch (self.state) {
+            State.NULL => {
+                if (c == 'd' or c == 'a') {
+                    self.state = State.START;
+                    self.value[self.pointer] = c;
+                    self.pointer += 1;
+                }
+            },
+            State.START => {
+                self.state = State.ACCEPTING;
+                self.value[self.pointer] = c;
+                self.pointer += 1;
+            },
+            State.ACCEPTING => {
+                if (c == ' ' or c == ';') {
+                    self.state = State.NULL;
+                    self.pointer = 0;
+                } else {
+                    self.value[self.pointer] = c;
+                    self.pointer += 1;
+                }
+            },
+            else => {},
+        }
+        return self.state;
+    }
+};
+pub const DFATag = enum { select, from, star, double_quote_string, column, table, order_by, order_by_item, order_by_dir };
+pub const DFA = union(DFATag) { select: SelectDFA, from: FromDFA, star: StarDFA, double_quote_string: DoubleQuoteStringDFA, column: ColumnDFA, table: TableDFA, order_by: OrderByDFA, order_by_item: OrderByItemDFA, order_by_dir: OrderByDirectionDFA };
+const TokenizeError = error{ StateFailed, DispatchFailed };
 const stderr = std.io.getStdErr().writer();
 const TokenizeResult = struct { original: []const u8, evaluations: std.ArrayList(EvaluateResult) };
 
@@ -300,6 +335,7 @@ fn scan(string: []const u8) !std.ArrayList(EvaluateResult) {
     var table_dfa = TableDFA{};
     var order_by_dfa = OrderByDFA{};
     var order_by_item_dfa = OrderByItemDFA{};
+    var order_by_dir_dfa = OrderByDirectionDFA{};
     var i: u32 = 0;
     var evaluations = std.ArrayList(EvaluateResult).init(std.heap.page_allocator);
     while (i < string.len) {
@@ -406,8 +442,6 @@ fn scan(string: []const u8) !std.ArrayList(EvaluateResult) {
                 while (order_by_dfa.transition(string[k]) == State.ACCEPTING) {
                     k += 1;
                 }
-                // move i cursor
-                i = k + 1;
                 if (order_by_dfa.state == State.FAILED) {
                     try stderr.print("\norder_by_dfa failed with: {s}\n", .{order_by_dfa.value});
                     return TokenizeError.StateFailed;
@@ -415,23 +449,43 @@ fn scan(string: []const u8) !std.ArrayList(EvaluateResult) {
                     std.debug.print("\norder_by_dfa accepted: \x1B[32m{s}\x1B[0m", .{order_by_dfa.value});
                     try evaluations.append(evaluate(DFA{ .order_by = order_by_dfa }));
                 }
-            }
 
-            // suspect `order by item` segment
-            if (try order_by_item_dfa.transition(string[i]) == State.START) {
-                var k = i + 1;
-                while (try order_by_item_dfa.transition(string[k]) == State.ACCEPTING) {
-                    k += 1;
-                }
-                // move i cursor
-                i = k + 1;
-                if (order_by_item_dfa.state == State.FAILED) {
-                    try stderr.print("\norder_by_item_dfa failed with: {s}\n", .{order_by_item_dfa.value.items});
-                    return TokenizeError.StateFailed;
+                // suspect `order by item` segment
+                if (try order_by_item_dfa.transition(string[k + 1]) == State.START) {
+                    k += 2;
+                    while (try order_by_item_dfa.transition(string[k]) == State.ACCEPTING) {
+                        k += 1;
+                    }
+                    // move i cursor
+                    i = k + 1;
+                    if (order_by_item_dfa.state == State.FAILED) {
+                        try stderr.print("\norder_by_item_dfa failed with: {s}\n", .{order_by_item_dfa.value.items});
+                        return TokenizeError.StateFailed;
+                    } else {
+                        std.debug.print("\norder_by_item_dfa accepted: \x1B[32m{s}\x1B[0m", .{order_by_item_dfa.value.items});
+                        try evaluations.append(evaluate(DFA{ .order_by_item = order_by_item_dfa }));
+                        order_by_item_dfa.value.clearAndFree();
+                    }
+
+                    // suspect `order by direction` segment
+                    if (order_by_dir_dfa.transition(string[k + 1]) == State.START) {
+                        k += 2;
+                        while (order_by_dir_dfa.transition(string[k]) == State.ACCEPTING) {
+                            k += 1;
+                        }
+                        // move i cursor here because nested DFA is done
+                        i = k + 1;
+                        if (order_by_dir_dfa.state == State.FAILED) {
+                            try stderr.print("\norder_by_dir_dfa failed with: {s}\n", .{order_by_dir_dfa.value});
+                            return TokenizeError.StateFailed;
+                        } else {
+                            std.debug.print("\norder_by_dir_dfa accepted: \x1B[32m{s}\x1B[0m", .{order_by_dir_dfa.value});
+                            try evaluations.append(evaluate(DFA{ .order_by_dir = order_by_dir_dfa }));
+                        }
+                    }
                 } else {
-                    std.debug.print("\norder_by_item_dfa accepted: \x1B[32m{s}\x1B[0m", .{order_by_item_dfa.value.items});
-                    try evaluations.append(evaluate(DFA{ .order_by_item = order_by_item_dfa }));
-                    order_by_item_dfa.value.clearAndFree();
+                    try stderr.print("\nindex: {d}, not followed by a item for 'order by'  ", .{k});
+                    return TokenizeError.DispatchFailed;
                 }
             }
         } else if (try double_quote_dfa.transition(c) == State.START) {
@@ -454,6 +508,8 @@ fn scan(string: []const u8) !std.ArrayList(EvaluateResult) {
         } else if (c == ' ') {
             std.debug.print("\nLeading whitespace character will be ignored for now.", .{});
             i += 1;
+        } else if (c == ';') {
+            std.debug.print("\nEncounter statement terminate character", .{});
         } else {
             std.debug.print(" This letter don't match any defined dfa", .{});
             i += 1;
@@ -499,7 +555,7 @@ test "full example" {
     const string =
         \\ select first_name, last_name, hire_date
         \\ from employees
-        \\ order by hire_date;
+        \\ order by hire_date desc;
     ;
     const result = try tokenize(string);
     try std.testing.expectEqualStrings(string, result.original);
