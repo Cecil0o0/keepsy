@@ -302,7 +302,7 @@ pub const OrderByDirectionDFA = struct {
                 self.pointer += 1;
             },
             State.ACCEPTING => {
-                if (c == ' ' or c == ';') {
+                if (c == ' ' or c == ';' or c == '\n') {
                     self.state = State.NULL;
                     self.pointer = 0;
                 } else {
@@ -315,9 +315,74 @@ pub const OrderByDirectionDFA = struct {
         return self.state;
     }
 };
-pub const DFATag = enum { select, from, star, double_quote_string, column, table, order_by, order_by_item, order_by_dir };
-pub const DFA = union(DFATag) { select: SelectDFA, from: FromDFA, star: StarDFA, double_quote_string: DoubleQuoteStringDFA, column: ColumnDFA, table: TableDFA, order_by: OrderByDFA, order_by_item: OrderByItemDFA, order_by_dir: OrderByDirectionDFA };
-const TokenizeError = error{ StateFailed, DispatchFailed };
+pub const LimitDFA = struct {
+    state: State = State.NULL,
+    value: std.ArrayList(u8) = std.ArrayList(u8).init(std.heap.page_allocator),
+    col: [2]u32 = [2]u32{ 0, 0 },
+    fn transition(self: *LimitDFA, c: u8) !State {
+        switch (self.state) {
+            State.NULL => {
+                if (c == 'l') {
+                    try self.value.append(c);
+                    self.state = State.START;
+                }
+            },
+            State.START => {
+                if (c == 'i') {
+                    try self.value.append(c);
+                    self.state = State.ACCEPTING;
+                } else {
+                    self.state = State.FAILED;
+                }
+            },
+            State.ACCEPTING => {
+                if (c == ';' or c == ' ' or c == '\n') {
+                    self.state = State.NULL;
+                } else {
+                    try self.value.append(c);
+                }
+            },
+            else => {},
+        }
+        return self.state;
+    }
+};
+pub const NumberDFA = struct {
+    state: State = State.NULL,
+    value: std.ArrayList(u8) = std.ArrayList(u8).init(std.heap.page_allocator),
+    col: [2]u32 = [2]u32{ 0, 0 },
+    fn transition(self: *NumberDFA, c: u8) !State {
+        switch (self.state) {
+            State.NULL => {
+                if (c >= 48 and c <= 57) {
+                    try self.value.append(c);
+                    self.state = State.START;
+                }
+            },
+            State.START => {
+                if (c >= 48 and c <= 57) {
+                    try self.value.append(c);
+                    self.state = State.ACCEPTING;
+                } else {
+                    self.state = State.FAILED;
+                }
+            },
+            State.ACCEPTING => {
+                if (c == ' ' or c == ';' or c == '\n') {
+                    self.state = State.NULL;
+                }
+                if (c >= 48 and c <= 57) {
+                    try self.value.append(c);
+                }
+            },
+            State.FAILED => {},
+        }
+        return self.state;
+    }
+};
+pub const DFATag = enum { select, from, star, double_quote_string, column, table, order_by, order_by_item, order_by_dir, limit, limit_number };
+pub const DFA = union(DFATag) { select: SelectDFA, from: FromDFA, star: StarDFA, double_quote_string: DoubleQuoteStringDFA, column: ColumnDFA, table: TableDFA, order_by: OrderByDFA, order_by_item: OrderByItemDFA, order_by_dir: OrderByDirectionDFA, limit: LimitDFA, limit_number: NumberDFA };
+const TokenizeError = error{ StateFailed, DispatchFailed, IndexedExceedFailed };
 const stderr = std.io.getStdErr().writer();
 const TokenizeResult = struct { original: []const u8, evaluations: std.ArrayList(EvaluateResult) };
 
@@ -336,9 +401,11 @@ fn scan(string: []const u8) !std.ArrayList(EvaluateResult) {
     var order_by_dfa = OrderByDFA{};
     var order_by_item_dfa = OrderByItemDFA{};
     var order_by_dir_dfa = OrderByDirectionDFA{};
+    var limit_dfa = LimitDFA{};
+    var number_dfa = NumberDFA{};
     var i: u32 = 0;
     var evaluations = std.ArrayList(EvaluateResult).init(std.heap.page_allocator);
-    while (i < string.len) {
+    scan_loop: while (i < string.len) {
         const c = string[i];
         std.debug.print("\ntry to dispatch letter '{c}' to leading dfa of a statement.", .{c});
 
@@ -350,7 +417,7 @@ fn scan(string: []const u8) !std.ArrayList(EvaluateResult) {
             while (select_dfa.transition(string[j]) == State.ACCEPTING) {
                 j += 1;
             }
-            // move i cursor
+            // move i pointer
             i = j + 1;
             if (select_dfa.state == State.FAILED) {
                 // Generally, if dfa went something wrong such as State.FAILED
@@ -367,10 +434,12 @@ fn scan(string: []const u8) !std.ArrayList(EvaluateResult) {
                 // just make dfa complete
                 star_dfa.col[0] = i;
                 _ = star_dfa.transition(' ');
-                i += 1;
                 star_dfa.col[1] = i;
                 std.debug.print("\nstar_dfa accepted: \x1B[32m{s}\x1B[0m", .{star_dfa.value});
                 try evaluations.append(evaluate(DFA{ .star = star_dfa }));
+                // move i pointer
+                i += 1;
+                if (i == string.len) break :scan_loop;
             } else {
                 // forward four letter
                 while (string[i] != 'f' or string[i + 1] != 'r' or string[i + 2] != 'o' or string[i + 3] != 'm') {
@@ -380,8 +449,6 @@ fn scan(string: []const u8) !std.ArrayList(EvaluateResult) {
                         while (try column_dfa.transition(string[k]) == State.ACCEPTING) {
                             k += 1;
                         }
-                        // move i cursor
-                        i = k + 1;
                         if (column_dfa.state == State.FAILED) {
                             // Generally, if dfa went something wrong such as State.FAILED
                             try stderr.print("\ncolumn_dfa failed with: {s}\n", .{column_dfa.value.items});
@@ -392,8 +459,16 @@ fn scan(string: []const u8) !std.ArrayList(EvaluateResult) {
                             try evaluations.append(evaluate(DFA{ .column = column_dfa }));
                             column_dfa.value.clearAndFree();
                         }
+                        // move i pointer
+                        i = k + 1;
+                        if (i == string.len) break :scan_loop;
                     }
                 }
+            }
+
+            // stripe whitespace
+            while (string[i] == ' ' or string[i] == '\n') {
+                i += 1;
             }
 
             // suspect `from` segment
@@ -403,8 +478,6 @@ fn scan(string: []const u8) !std.ArrayList(EvaluateResult) {
                 while (from_dfa.transition(string[k]) == State.ACCEPTING) {
                     k += 1;
                 }
-                // move i cursor
-                i = k + 1;
                 // Generally, if dfa went something wrong such as State.FAILED
                 if (from_dfa.state == State.FAILED) {
                     try stderr.print("\nfrom_dfa failed with: {s}\n", .{from_dfa.value});
@@ -414,6 +487,9 @@ fn scan(string: []const u8) !std.ArrayList(EvaluateResult) {
                     std.debug.print("\nfrom_dfa   accepted: \x1B[32m{s}\x1B[0m", .{from_dfa.value});
                     try evaluations.append(evaluate(DFA{ .from = from_dfa }));
                 }
+                // move i pointer
+                i = k + 1;
+                if (i == string.len) break :scan_loop;
             }
 
             // suspect `table` segment
@@ -421,10 +497,12 @@ fn scan(string: []const u8) !std.ArrayList(EvaluateResult) {
                 table_dfa.col[0] = i;
                 var k = i + 1;
                 while (try table_dfa.transition(string[k]) == State.ACCEPTING) {
-                    k += 1;
+                    if (k + 1 == string.len) {
+                        break;
+                    } else {
+                        k += 1;
+                    }
                 }
-                // move `i` cursor
-                i = k + 1;
                 // Generally, if dfa went something wrong such as State.FAILED
                 if (table_dfa.state == State.FAILED) {
                     try stderr.print("\ntable_dfa failed with: {s}\n", .{table_dfa.value.items});
@@ -434,6 +512,9 @@ fn scan(string: []const u8) !std.ArrayList(EvaluateResult) {
                     std.debug.print("\ntable_dfa  accepted: \x1B[32m{s}\x1B[0m", .{table_dfa.value.items});
                     try evaluations.append(evaluate(DFA{ .table = table_dfa }));
                 }
+                // move `i` cursor
+                i = k + 1;
+                if (i == string.len) break :scan_loop;
             }
 
             // suspect `order by` segment
@@ -456,8 +537,6 @@ fn scan(string: []const u8) !std.ArrayList(EvaluateResult) {
                     while (try order_by_item_dfa.transition(string[k]) == State.ACCEPTING) {
                         k += 1;
                     }
-                    // move i cursor
-                    i = k + 1;
                     if (order_by_item_dfa.state == State.FAILED) {
                         try stderr.print("\norder_by_item_dfa failed with: {s}\n", .{order_by_item_dfa.value.items});
                         return TokenizeError.StateFailed;
@@ -466,6 +545,9 @@ fn scan(string: []const u8) !std.ArrayList(EvaluateResult) {
                         try evaluations.append(evaluate(DFA{ .order_by_item = order_by_item_dfa }));
                         order_by_item_dfa.value.clearAndFree();
                     }
+                    // move i pointer
+                    i = k + 1;
+                    if (i == string.len) break :scan_loop;
 
                     // suspect `order by direction` segment
                     if (order_by_dir_dfa.transition(string[k + 1]) == State.START) {
@@ -473,8 +555,6 @@ fn scan(string: []const u8) !std.ArrayList(EvaluateResult) {
                         while (order_by_dir_dfa.transition(string[k]) == State.ACCEPTING) {
                             k += 1;
                         }
-                        // move i cursor here because nested DFA is done
-                        i = k + 1;
                         if (order_by_dir_dfa.state == State.FAILED) {
                             try stderr.print("\norder_by_dir_dfa failed with: {s}\n", .{order_by_dir_dfa.value});
                             return TokenizeError.StateFailed;
@@ -482,10 +562,52 @@ fn scan(string: []const u8) !std.ArrayList(EvaluateResult) {
                             std.debug.print("\norder_by_dir_dfa accepted: \x1B[32m{s}\x1B[0m", .{order_by_dir_dfa.value});
                             try evaluations.append(evaluate(DFA{ .order_by_dir = order_by_dir_dfa }));
                         }
+                        // move i pointer here because nested DFA is done
+                        i = k + 1;
+                        if (i == string.len) break :scan_loop;
                     }
                 } else {
                     try stderr.print("\nindex: {d}, not followed by a item for 'order by'  ", .{k});
                     return TokenizeError.DispatchFailed;
+                }
+            }
+
+            // stripe whitespace
+            while (string[i] == ' ' or string[i] == '\n') {
+                i += 1;
+            }
+
+            // suspect `limit` segment
+            if (try limit_dfa.transition(string[i]) == State.START) {
+                var k = i + 1;
+                while (try limit_dfa.transition(string[k]) == State.ACCEPTING) {
+                    k += 1;
+                }
+                if (limit_dfa.state == State.FAILED) {
+                    try stderr.print("\nlimit_dfa failed with: {s}\n", .{limit_dfa.value.items});
+                    return TokenizeError.StateFailed;
+                } else {
+                    std.debug.print("\nlimit_dfa accepted: \x1B[32m{s}\x1B[0m", .{limit_dfa.value.items});
+                    try evaluations.append(evaluate(DFA{ .limit = limit_dfa }));
+                    limit_dfa.value.clearAndFree();
+                }
+                // try followed by number
+                if (try number_dfa.transition(string[k + 1]) == State.START) {
+                    k += 2;
+                    while (try number_dfa.transition(string[k]) == State.ACCEPTING) {
+                        k += 1;
+                    }
+                    if (number_dfa.state == State.FAILED) {
+                        try stderr.print("\nnumber_dfa failed with: {s}\n", .{number_dfa.value.items});
+                        return TokenizeError.StateFailed;
+                    } else {
+                        std.debug.print("\nnumber_dfa accepted: \x1B[32m{s}\x1B[0m", .{number_dfa.value.items});
+                        try evaluations.append(evaluate(DFA{ .limit_number = number_dfa }));
+                        number_dfa.value.clearAndFree();
+                    }
+                    // move i pointer
+                    i = k + 1;
+                    if (i == string.len) break :scan_loop;
                 }
             }
         } else if (try double_quote_dfa.transition(c) == State.START) {
@@ -510,6 +632,7 @@ fn scan(string: []const u8) !std.ArrayList(EvaluateResult) {
             i += 1;
         } else if (c == ';') {
             std.debug.print("\nEncounter statement terminate character", .{});
+            i += 1;
         } else {
             std.debug.print(" This letter don't match any defined dfa", .{});
             i += 1;
@@ -531,22 +654,22 @@ test "A correct keyword/identifier in DQL" {
 }
 
 test "A regular statement in DQL" {
-    const string = "select * from \"user\"";
+    const string = "select * from user";
     const result = try tokenize(string);
     try std.testing.expectEqualStrings(string, result.original);
 }
 
-test "A regular statement in DQL with evaluation" {
+test "A regular evaluated statement in DQL" {
     const string = "select * from \"user\"";
     const result = try tokenize(string);
     std.debug.print("------------ Evaluations as Result below: \n", .{});
     for (result.evaluations.items) |evaluation| {
-        std.debug.print("category: {}, value: {c}, index_from_to: [{}, {}]\n", .{ evaluation.category, evaluation.value, evaluation.col[0], evaluation.col[1] });
+        std.debug.print("category: {}, value: {s}, index_from_to: [{}, {}]\n", .{ evaluation.category, evaluation.value, evaluation.col[0], evaluation.col[1] });
     }
 }
 
 test "Two statements in DQL" {
-    const string = "select * from \"user\"; select * from \"tradement\"";
+    const string = "select * from \"user\"; select * from \"item\"";
     const result = try tokenize(string);
     try std.testing.expectEqualStrings(string, result.original);
 }
@@ -555,7 +678,8 @@ test "full example" {
     const string =
         \\ select first_name, last_name, hire_date
         \\ from employees
-        \\ order by hire_date desc;
+        \\ order by hire_date desc
+        \\ limit 40000;
     ;
     const result = try tokenize(string);
     try std.testing.expectEqualStrings(string, result.original);

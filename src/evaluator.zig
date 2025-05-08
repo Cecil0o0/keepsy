@@ -40,7 +40,7 @@ pub fn evaluate(dfa: DFA) EvaluateResult {
             return EvaluateResult{ .category = LexicalCategory.keyword, .value = dfa.from.value[0..], .col = dfa.from.col };
         },
         DFATag.star => {
-            return EvaluateResult{ .category = LexicalCategory.punctuator, .value = dfa.star.value[0..], .col = dfa.star.col };
+            return EvaluateResult{ .category = LexicalCategory.identifier, .value = dfa.star.value[0..], .col = dfa.star.col };
         },
         DFATag.double_quote_string => {
             return EvaluateResult{ .category = LexicalCategory.literal, .value = dfa.double_quote_string.value.items, .col = dfa.double_quote_string.col };
@@ -59,6 +59,12 @@ pub fn evaluate(dfa: DFA) EvaluateResult {
         },
         DFATag.order_by_dir => {
             return EvaluateResult{ .category = LexicalCategory.keyword, .value = dfa.order_by_dir.value[0..], .col = dfa.order_by_dir.col };
+        },
+        DFATag.limit => {
+            return EvaluateResult{ .category = LexicalCategory.keyword, .value = dfa.limit.value.items, .col = dfa.limit.col };
+        },
+        DFATag.limit_number => {
+            return EvaluateResult{ .category = LexicalCategory.literal, .value = dfa.limit_number.value.items, .col = dfa.limit_number.col };
         },
     }
 }
