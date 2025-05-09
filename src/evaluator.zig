@@ -66,5 +66,8 @@ pub fn evaluate(dfa: DFA) EvaluateResult {
         DFATag.limit_number => {
             return EvaluateResult{ .category = LexicalCategory.literal, .value = dfa.limit_number.value.items, .col = dfa.limit_number.col };
         },
+        DFATag.where => {
+            return EvaluateResult{ .category = LexicalCategory.keyword, .value = dfa.where.value.items, .col = dfa.where.col };
+        },
     }
 }

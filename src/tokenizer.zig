@@ -380,8 +380,44 @@ pub const NumberDFA = struct {
         return self.state;
     }
 };
-pub const DFATag = enum { select, from, star, double_quote_string, column, table, order_by, order_by_item, order_by_dir, limit, limit_number };
-pub const DFA = union(DFATag) { select: SelectDFA, from: FromDFA, star: StarDFA, double_quote_string: DoubleQuoteStringDFA, column: ColumnDFA, table: TableDFA, order_by: OrderByDFA, order_by_item: OrderByItemDFA, order_by_dir: OrderByDirectionDFA, limit: LimitDFA, limit_number: NumberDFA };
+pub const WhereDFA = struct {
+    state: State = State.NULL,
+    value: std.ArrayList(u8) = std.ArrayList(u8).init(std.heap.page_allocator),
+    col: [2]u32 = [2]u32{ 0, 0 },
+    fn transition(self: *WhereDFA, c: u8) !State {
+        switch (self.state) {
+            State.NULL => {
+                if (c == 'w') {
+                    self.state = State.START;
+                    try self.value.append(c);
+                }
+            },
+            State.START => {
+                if (c == 'h') {
+                    self.state = State.ACCEPTING;
+                    try self.value.append(c);
+                } else {
+                    self.state = State.FAILED;
+                }
+            },
+            State.ACCEPTING => {
+                if (c == ' ') {
+                    self.state = State.NULL;
+                } else {
+                    if (c == 'e' or c == 'r') {
+                        try self.value.append(c);
+                    } else {
+                        self.state = State.FAILED;
+                    }
+                }
+            },
+            State.FAILED => {},
+        }
+        return self.state;
+    }
+};
+pub const DFATag = enum { select, from, star, double_quote_string, column, table, order_by, order_by_item, order_by_dir, limit, limit_number, where };
+pub const DFA = union(DFATag) { select: SelectDFA, from: FromDFA, star: StarDFA, double_quote_string: DoubleQuoteStringDFA, column: ColumnDFA, table: TableDFA, order_by: OrderByDFA, order_by_item: OrderByItemDFA, order_by_dir: OrderByDirectionDFA, limit: LimitDFA, limit_number: NumberDFA, where: WhereDFA };
 const TokenizeError = error{ StateFailed, DispatchFailed, IndexedExceedFailed };
 const stderr = std.io.getStdErr().writer();
 const TokenizeResult = struct { original: []const u8, evaluations: std.ArrayList(EvaluateResult) };
@@ -403,6 +439,7 @@ fn scan(string: []const u8) !std.ArrayList(EvaluateResult) {
     var order_by_dir_dfa = OrderByDirectionDFA{};
     var limit_dfa = LimitDFA{};
     var number_dfa = NumberDFA{};
+    var where_dfa = WhereDFA{};
     var i: u32 = 0;
     var evaluations = std.ArrayList(EvaluateResult).init(std.heap.page_allocator);
     scan_loop: while (i < string.len) {
@@ -610,6 +647,29 @@ fn scan(string: []const u8) !std.ArrayList(EvaluateResult) {
                     if (i == string.len) break :scan_loop;
                 }
             }
+
+            // stripe whitespace
+            while (string[i] == ' ' or string[i] == '\n') {
+                i += 1;
+            }
+
+            // suspect `where` segment
+            if (try where_dfa.transition(string[i]) == State.START) {
+                var k = i + 1;
+                while (try where_dfa.transition(string[k]) == State.ACCEPTING) {
+                    k += 1;
+                }
+                if (where_dfa.state == State.FAILED) {
+                    try stderr.print("\nwhere_dfa failed with: {s}\n", .{where_dfa.value.items});
+                    return TokenizeError.StateFailed;
+                } else {
+                    std.debug.print("\nwhere_dfa accepted: \x1B[32m{s}\x1B[0m", .{where_dfa.value.items});
+                    try evaluations.append(evaluate(DFA{ .where = where_dfa }));
+                    where_dfa.value.clearAndFree();
+                }
+                i = k + 1;
+                // try `condition` segement of `where`
+            }
         } else if (try double_quote_dfa.transition(c) == State.START) {
             std.debug.print("\nhit double_quote_dfa", .{});
             double_quote_dfa.col[0] = i;
@@ -679,7 +739,8 @@ test "full example" {
         \\ select first_name, last_name, hire_date
         \\ from employees
         \\ order by hire_date desc
-        \\ limit 40000;
+        \\ limit 40000
+        \\ where hire_date < 1746803432;
     ;
     const result = try tokenize(string);
     try std.testing.expectEqualStrings(string, result.original);
