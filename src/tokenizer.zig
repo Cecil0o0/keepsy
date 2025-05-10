@@ -416,8 +416,8 @@ pub const WhereDFA = struct {
         return self.state;
     }
 };
-pub const LexemTag = enum { select, from, star, double_quote_string, column, table, order_by, order_by_item, order_by_dir, limit, limit_number, where };
-pub const Lexem = union(LexemTag) { select: SelectDFA, from: FromDFA, star: StarDFA, double_quote_string: DoubleQuoteStringDFA, column: ColumnDFA, table: TableDFA, order_by: OrderByDFA, order_by_item: OrderByItemDFA, order_by_dir: OrderByDirectionDFA, limit: LimitDFA, limit_number: NumberDFA, where: WhereDFA };
+pub const LexemeTag = enum { select, from, star, double_quote_string, column, table, order_by, order_by_item, order_by_dir, limit, limit_number, where };
+pub const Lexeme = union(LexemeTag) { select: SelectDFA, from: FromDFA, star: StarDFA, double_quote_string: DoubleQuoteStringDFA, column: ColumnDFA, table: TableDFA, order_by: OrderByDFA, order_by_item: OrderByItemDFA, order_by_dir: OrderByDirectionDFA, limit: LimitDFA, limit_number: NumberDFA, where: WhereDFA };
 const TokenizeError = error{ StateFailed, DispatchFailed, IndexedExceedFailed };
 const stderr = std.io.getStdErr().writer();
 const TokenizeResult = struct { original: []const u8, evaluations: std.ArrayList(EvaluateResult) };
@@ -463,7 +463,7 @@ fn scan(string: []const u8) !std.ArrayList(EvaluateResult) {
             } else {
                 select_dfa.col[1] = j;
                 std.debug.print("\nselect_dfa accepted: \x1B[32m{s}\x1B[0m", .{select_dfa.value});
-                try evaluations.append(evaluate(Lexem{ .select = select_dfa }));
+                try evaluations.append(evaluate(Lexeme{ .select = select_dfa }));
             }
 
             // suspect `regular column` segment, could be extended to `function-call column`.
@@ -473,7 +473,7 @@ fn scan(string: []const u8) !std.ArrayList(EvaluateResult) {
                 _ = star_dfa.transition(' ');
                 star_dfa.col[1] = i;
                 std.debug.print("\nstar_dfa accepted: \x1B[32m{s}\x1B[0m", .{star_dfa.value});
-                try evaluations.append(evaluate(Lexem{ .star = star_dfa }));
+                try evaluations.append(evaluate(Lexeme{ .star = star_dfa }));
                 // move i pointer
                 i += 1;
                 if (i == string.len) break :scan_loop;
@@ -493,7 +493,7 @@ fn scan(string: []const u8) !std.ArrayList(EvaluateResult) {
                         } else {
                             column_dfa.col[1] = k;
                             std.debug.print("\ncolumn_dfa accepted: \x1B[32m{s}\x1B[0m", .{column_dfa.value.items});
-                            try evaluations.append(evaluate(Lexem{ .column = column_dfa }));
+                            try evaluations.append(evaluate(Lexeme{ .column = column_dfa }));
                             column_dfa.value.clearAndFree();
                         }
                         // move i pointer
@@ -522,7 +522,7 @@ fn scan(string: []const u8) !std.ArrayList(EvaluateResult) {
                 } else {
                     from_dfa.col[1] = j;
                     std.debug.print("\nfrom_dfa   accepted: \x1B[32m{s}\x1B[0m", .{from_dfa.value});
-                    try evaluations.append(evaluate(Lexem{ .from = from_dfa }));
+                    try evaluations.append(evaluate(Lexeme{ .from = from_dfa }));
                 }
                 // move i pointer
                 i = k + 1;
@@ -547,7 +547,7 @@ fn scan(string: []const u8) !std.ArrayList(EvaluateResult) {
                 } else {
                     table_dfa.col[1] = k;
                     std.debug.print("\ntable_dfa  accepted: \x1B[32m{s}\x1B[0m", .{table_dfa.value.items});
-                    try evaluations.append(evaluate(Lexem{ .table = table_dfa }));
+                    try evaluations.append(evaluate(Lexeme{ .table = table_dfa }));
                 }
                 // move `i` cursor
                 i = k + 1;
@@ -565,7 +565,7 @@ fn scan(string: []const u8) !std.ArrayList(EvaluateResult) {
                     return TokenizeError.StateFailed;
                 } else {
                     std.debug.print("\norder_by_dfa accepted: \x1B[32m{s}\x1B[0m", .{order_by_dfa.value});
-                    try evaluations.append(evaluate(Lexem{ .order_by = order_by_dfa }));
+                    try evaluations.append(evaluate(Lexeme{ .order_by = order_by_dfa }));
                 }
 
                 // suspect `order by item` segment
@@ -579,7 +579,7 @@ fn scan(string: []const u8) !std.ArrayList(EvaluateResult) {
                         return TokenizeError.StateFailed;
                     } else {
                         std.debug.print("\norder_by_item_dfa accepted: \x1B[32m{s}\x1B[0m", .{order_by_item_dfa.value.items});
-                        try evaluations.append(evaluate(Lexem{ .order_by_item = order_by_item_dfa }));
+                        try evaluations.append(evaluate(Lexeme{ .order_by_item = order_by_item_dfa }));
                         order_by_item_dfa.value.clearAndFree();
                     }
                     // move i pointer
@@ -597,7 +597,7 @@ fn scan(string: []const u8) !std.ArrayList(EvaluateResult) {
                             return TokenizeError.StateFailed;
                         } else {
                             std.debug.print("\norder_by_dir_dfa accepted: \x1B[32m{s}\x1B[0m", .{order_by_dir_dfa.value});
-                            try evaluations.append(evaluate(Lexem{ .order_by_dir = order_by_dir_dfa }));
+                            try evaluations.append(evaluate(Lexeme{ .order_by_dir = order_by_dir_dfa }));
                         }
                         // move i pointer here because nested DFA is done
                         i = k + 1;
@@ -625,7 +625,7 @@ fn scan(string: []const u8) !std.ArrayList(EvaluateResult) {
                     return TokenizeError.StateFailed;
                 } else {
                     std.debug.print("\nlimit_dfa accepted: \x1B[32m{s}\x1B[0m", .{limit_dfa.value.items});
-                    try evaluations.append(evaluate(Lexem{ .limit = limit_dfa }));
+                    try evaluations.append(evaluate(Lexeme{ .limit = limit_dfa }));
                     limit_dfa.value.clearAndFree();
                 }
                 // try followed by number
@@ -639,7 +639,7 @@ fn scan(string: []const u8) !std.ArrayList(EvaluateResult) {
                         return TokenizeError.StateFailed;
                     } else {
                         std.debug.print("\nnumber_dfa accepted: \x1B[32m{s}\x1B[0m", .{number_dfa.value.items});
-                        try evaluations.append(evaluate(Lexem{ .limit_number = number_dfa }));
+                        try evaluations.append(evaluate(Lexeme{ .limit_number = number_dfa }));
                         number_dfa.value.clearAndFree();
                     }
                     // move i pointer
@@ -664,7 +664,7 @@ fn scan(string: []const u8) !std.ArrayList(EvaluateResult) {
                     return TokenizeError.StateFailed;
                 } else {
                     std.debug.print("\nwhere_dfa accepted: \x1B[32m{s}\x1B[0m", .{where_dfa.value.items});
-                    try evaluations.append(evaluate(Lexem{ .where = where_dfa }));
+                    try evaluations.append(evaluate(Lexeme{ .where = where_dfa }));
                     where_dfa.value.clearAndFree();
                 }
                 i = k + 1;
@@ -685,7 +685,7 @@ fn scan(string: []const u8) !std.ArrayList(EvaluateResult) {
             } else {
                 double_quote_dfa.col[1] = j;
                 std.debug.print("\ndouble_quote_dfa accepted: \x1B[32m{s}\x1B[0m", .{double_quote_dfa.value.items});
-                try evaluations.append(evaluate(Lexem{ .double_quote_string = double_quote_dfa }));
+                try evaluations.append(evaluate(Lexeme{ .double_quote_string = double_quote_dfa }));
             }
         } else if (c == ' ') {
             std.debug.print("\nLeading whitespace character will be ignored for now.", .{});
