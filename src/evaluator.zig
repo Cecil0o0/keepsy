@@ -1,6 +1,6 @@
 const std = @import("std");
-const DFATag = @import("./tokenizer.zig").DFATag;
-const DFA = @import("./tokenizer.zig").DFA;
+const LexemTag = @import("./tokenizer.zig").LexemTag;
+const Lexem = @import("./tokenizer.zig").Lexem;
 const SelectDFA = @import("./tokenizer.zig").SelectDFA;
 const FromDFA = @import("./tokenizer.zig").FromDFA;
 const ColumnDFA = @import("./tokenizer.zig").ColumnDFA;
@@ -31,43 +31,43 @@ pub const EvaluateResult = struct {
     col: [2]u32,
 };
 
-pub fn evaluate(dfa: DFA) EvaluateResult {
-    switch (dfa) {
-        DFATag.select => {
-            return EvaluateResult{ .category = LexicalCategory.keyword, .value = dfa.select.value[0..], .col = dfa.select.col };
+pub fn evaluate(lexem: Lexem) EvaluateResult {
+    switch (lexem) {
+        LexemTag.select => {
+            return EvaluateResult{ .category = LexicalCategory.keyword, .value = lexem.select.value[0..], .col = lexem.select.col };
         },
-        DFATag.from => {
-            return EvaluateResult{ .category = LexicalCategory.keyword, .value = dfa.from.value[0..], .col = dfa.from.col };
+        LexemTag.from => {
+            return EvaluateResult{ .category = LexicalCategory.keyword, .value = lexem.from.value[0..], .col = lexem.from.col };
         },
-        DFATag.star => {
-            return EvaluateResult{ .category = LexicalCategory.identifier, .value = dfa.star.value[0..], .col = dfa.star.col };
+        LexemTag.star => {
+            return EvaluateResult{ .category = LexicalCategory.identifier, .value = lexem.star.value[0..], .col = lexem.star.col };
         },
-        DFATag.double_quote_string => {
-            return EvaluateResult{ .category = LexicalCategory.literal, .value = dfa.double_quote_string.value.items, .col = dfa.double_quote_string.col };
+        LexemTag.double_quote_string => {
+            return EvaluateResult{ .category = LexicalCategory.literal, .value = lexem.double_quote_string.value.items, .col = lexem.double_quote_string.col };
         },
-        DFATag.column => {
-            return EvaluateResult{ .category = LexicalCategory.identifier, .value = dfa.column.value.items, .col = dfa.column.col };
+        LexemTag.column => {
+            return EvaluateResult{ .category = LexicalCategory.identifier, .value = lexem.column.value.items, .col = lexem.column.col };
         },
-        DFATag.table => {
-            return EvaluateResult{ .category = LexicalCategory.identifier, .value = dfa.table.value.items, .col = dfa.table.col };
+        LexemTag.table => {
+            return EvaluateResult{ .category = LexicalCategory.identifier, .value = lexem.table.value.items, .col = lexem.table.col };
         },
-        DFATag.order_by => {
-            return EvaluateResult{ .category = LexicalCategory.keyword, .value = dfa.order_by.value[0..], .col = dfa.order_by.col };
+        LexemTag.order_by => {
+            return EvaluateResult{ .category = LexicalCategory.keyword, .value = lexem.order_by.value[0..], .col = lexem.order_by.col };
         },
-        DFATag.order_by_item => {
-            return EvaluateResult{ .category = LexicalCategory.identifier, .value = dfa.order_by_item.value.items, .col = dfa.order_by_item.col };
+        LexemTag.order_by_item => {
+            return EvaluateResult{ .category = LexicalCategory.identifier, .value = lexem.order_by_item.value.items, .col = lexem.order_by_item.col };
         },
-        DFATag.order_by_dir => {
-            return EvaluateResult{ .category = LexicalCategory.keyword, .value = dfa.order_by_dir.value[0..], .col = dfa.order_by_dir.col };
+        LexemTag.order_by_dir => {
+            return EvaluateResult{ .category = LexicalCategory.keyword, .value = lexem.order_by_dir.value[0..], .col = lexem.order_by_dir.col };
         },
-        DFATag.limit => {
-            return EvaluateResult{ .category = LexicalCategory.keyword, .value = dfa.limit.value.items, .col = dfa.limit.col };
+        LexemTag.limit => {
+            return EvaluateResult{ .category = LexicalCategory.keyword, .value = lexem.limit.value.items, .col = lexem.limit.col };
         },
-        DFATag.limit_number => {
-            return EvaluateResult{ .category = LexicalCategory.literal, .value = dfa.limit_number.value.items, .col = dfa.limit_number.col };
+        LexemTag.limit_number => {
+            return EvaluateResult{ .category = LexicalCategory.literal, .value = lexem.limit_number.value.items, .col = lexem.limit_number.col };
         },
-        DFATag.where => {
-            return EvaluateResult{ .category = LexicalCategory.keyword, .value = dfa.where.value.items, .col = dfa.where.col };
+        LexemTag.where => {
+            return EvaluateResult{ .category = LexicalCategory.keyword, .value = lexem.where.value.items, .col = lexem.where.col };
         },
     }
 }
