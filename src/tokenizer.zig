@@ -74,7 +74,8 @@ pub const SelectDFA = struct {
                     else => {},
                 }
             },
-            else => {},
+            // when and if the state machine is in the failed state, we will be paniced for current incoming input character.
+            State.FAILED => unreachable,
         }
         return dfa.state;
     }
@@ -416,8 +417,33 @@ pub const WhereDFA = struct {
         return self.state;
     }
 };
-pub const LexemeTag = enum { select, from, star, double_quote_string, column, table, order_by, order_by_item, order_by_dir, limit, limit_number, where };
-pub const Lexeme = union(LexemeTag) { select: SelectDFA, from: FromDFA, star: StarDFA, double_quote_string: DoubleQuoteStringDFA, column: ColumnDFA, table: TableDFA, order_by: OrderByDFA, order_by_item: OrderByItemDFA, order_by_dir: OrderByDirectionDFA, limit: LimitDFA, limit_number: NumberDFA, where: WhereDFA };
+pub const WhereConditionDFA = struct {
+    state: State = State.NULL,
+    value: std.ArrayList(u8) = std.ArrayList(u8).init(std.heap.page_allocator),
+    col: [2]u32 = [2]u32{ 0, 0 },
+    fn transition(self: *WhereConditionDFA, c: u8) !State {
+        switch (self.state) {
+            State.NULL => {
+                if (c != ';') {
+                    self.state = State.START;
+                    try self.value.append(c);
+                }
+            },
+            State.START, State.ACCEPTING => {
+                if (c == ';') {
+                    self.state = State.NULL;
+                } else {
+                    self.state = State.ACCEPTING;
+                    try self.value.append(c);
+                }
+            },
+            else => {},
+        }
+        return self.state;
+    }
+};
+pub const LexemeTag = enum { select, from, star, double_quote_string, column, table, order_by, order_by_item, order_by_dir, limit, limit_number, where, where_condition };
+pub const Lexeme = union(LexemeTag) { select: SelectDFA, from: FromDFA, star: StarDFA, double_quote_string: DoubleQuoteStringDFA, column: ColumnDFA, table: TableDFA, order_by: OrderByDFA, order_by_item: OrderByItemDFA, order_by_dir: OrderByDirectionDFA, limit: LimitDFA, limit_number: NumberDFA, where: WhereDFA, where_condition: WhereConditionDFA };
 const TokenizeError = error{ StateFailed, DispatchFailed, IndexedExceedFailed };
 const stderr = std.io.getStdErr().writer();
 const TokenizeResult = struct { original: []const u8, evaluations: std.ArrayList(EvaluateResult) };
@@ -440,6 +466,7 @@ fn scan(string: []const u8) !std.ArrayList(EvaluateResult) {
     var limit_dfa = LimitDFA{};
     var number_dfa = NumberDFA{};
     var where_dfa = WhereDFA{};
+    var where_condition_dfa = WhereConditionDFA{};
     var i: u32 = 0;
     var evaluations = std.ArrayList(EvaluateResult).init(std.heap.page_allocator);
     scan_loop: while (i < string.len) {
@@ -668,7 +695,29 @@ fn scan(string: []const u8) !std.ArrayList(EvaluateResult) {
                     where_dfa.value.clearAndFree();
                 }
                 i = k + 1;
+                // stripe whitespace
+                while (string[i] == ' ' or string[i] == '\n') {
+                    i += 1;
+                }
+
                 // try `condition` segement of `where` clause
+                if (try where_condition_dfa.transition(string[i]) == State.START) {
+                    var condition_k = i + 1;
+                    while (try where_condition_dfa.transition(string[condition_k]) == State.ACCEPTING) {
+                        condition_k += 1;
+                    }
+                    if (where_condition_dfa.state == State.FAILED) {
+                        try stderr.print("\ncondition_dfa failed with: {s}\n", .{where_condition_dfa.value.items});
+                        return TokenizeError.StateFailed;
+                    } else {
+                        std.debug.print("\ncondition_dfa accepted: \x1B[32m{s}\x1B[0m", .{where_condition_dfa.value.items});
+                        try evaluations.append(evaluate(Lexeme{ .where_condition = where_condition_dfa }));
+                        where_condition_dfa.value.clearAndFree();
+                    }
+                    // move i pointer
+                    i = condition_k + 1;
+                    if (i == string.len) break :scan_loop;
+                }
             }
         } else if (try double_quote_dfa.transition(c) == State.START) {
             std.debug.print("\nhit double_quote_dfa", .{});
@@ -720,11 +769,11 @@ test "A regular statement in DQL" {
 }
 
 test "A regular evaluated statement in DQL" {
-    const string = "select * from \"user\"";
+    const string = "select * from 'user'";
     const result = try tokenize(string);
     std.debug.print("------------ Evaluations as Result below: \n", .{});
     for (result.evaluations.items) |evaluation| {
-        std.debug.print("category: {}, value: {s}, index_from_to: [{}, {}]\n", .{ evaluation.category, evaluation.value, evaluation.col[0], evaluation.col[1] });
+        std.debug.print("category: {}, value: {c}, string index from {} to {}\n", .{ evaluation.category, evaluation.value, evaluation.col[0], evaluation.col[1] });
     }
 }
 
@@ -740,7 +789,7 @@ test "full example" {
         \\ from employees
         \\ order by hire_date desc
         \\ limit 40000
-        \\ where hire_date < 1746803432;
+        \\ where hire_date < 1746803432 or Country='Mexico';
     ;
     const result = try tokenize(string);
     try std.testing.expectEqualStrings(string, result.original);

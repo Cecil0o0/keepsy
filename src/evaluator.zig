@@ -69,5 +69,8 @@ pub fn evaluate(lexem: Lexeme) EvaluateResult {
         LexemeTag.where => {
             return EvaluateResult{ .category = LexicalCategory.keyword, .value = lexem.where.value.items, .col = lexem.where.col };
         },
+        LexemeTag.where_condition => {
+            return EvaluateResult{ .category = LexicalCategory.literal, .value = lexem.where_condition.value.items, .col = lexem.where_condition.col };
+        },
     }
 }
