@@ -34,13 +34,14 @@ pub const EvaluateResult = struct {
 pub fn evaluate(lexem: Lexeme) EvaluateResult {
     switch (lexem) {
         LexemeTag.select => {
-            return EvaluateResult{ .category = LexicalCategory.keyword, .value = lexem.select.value[0..], .col = lexem.select.col };
+            // TODO At evaluate stage, we should make a copy for avoiding segmentation fault caused by accessing invalid memory address.
+            return EvaluateResult{ .category = LexicalCategory.keyword, .value = lexem.select.value.items, .col = lexem.select.col };
         },
         LexemeTag.from => {
-            return EvaluateResult{ .category = LexicalCategory.keyword, .value = lexem.from.value[0..], .col = lexem.from.col };
+            return EvaluateResult{ .category = LexicalCategory.keyword, .value = &lexem.from.value, .col = lexem.from.col };
         },
         LexemeTag.star => {
-            return EvaluateResult{ .category = LexicalCategory.identifier, .value = lexem.star.value[0..], .col = lexem.star.col };
+            return EvaluateResult{ .category = LexicalCategory.identifier, .value = &lexem.star.value, .col = lexem.star.col };
         },
         LexemeTag.double_quote_string => {
             return EvaluateResult{ .category = LexicalCategory.literal, .value = lexem.double_quote_string.value.items, .col = lexem.double_quote_string.col };

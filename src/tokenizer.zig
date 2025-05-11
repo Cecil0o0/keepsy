@@ -8,67 +8,66 @@ const State = enum { NULL, START, ACCEPTING, FAILED };
 // reference: https://en.wikipedia.org/wiki/Alphabet_(formal_languages)
 const alphabet = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789()_'\"";
 pub const SelectDFA = struct {
-    state: State,
-    value: [6]u8 = [_]u8{ 1, 1, 1, 1, 1, 1 },
+    state: State = State.NULL,
+    value: std.ArrayList(u8) = std.ArrayList(u8).init(std.heap.page_allocator),
     current_ptr_index: u8 = 0,
     col: [2]u32 = [2]u32{ 0, 0 },
-    fn transition(dfa: *SelectDFA, c: u8) State {
-        var ptr = &dfa.value;
-        switch (dfa.state) {
+    fn transition(self: *SelectDFA, c: u8) !State {
+        switch (self.state) {
             State.NULL => {
                 if (c == 's') {
-                    dfa.state = State.START;
-                    ptr[dfa.current_ptr_index] = c;
-                    dfa.current_ptr_index += 1;
+                    self.state = State.START;
+                    try self.value.append(c);
+                    self.current_ptr_index += 1;
                 }
             },
             State.START => {
                 if (c == 'e') {
-                    dfa.state = State.ACCEPTING;
-                    ptr[dfa.current_ptr_index] = c;
-                    dfa.current_ptr_index += 1;
+                    self.state = State.ACCEPTING;
+                    try self.value.append(c);
+                    self.current_ptr_index += 1;
                 } else {
-                    dfa.state = State.FAILED;
-                    dfa.current_ptr_index = 0;
+                    self.state = State.FAILED;
+                    self.current_ptr_index = 0;
                 }
             },
             State.ACCEPTING => {
-                switch (dfa.current_ptr_index) {
+                switch (self.current_ptr_index) {
                     2 => {
                         if (c == 'l') {
-                            ptr[dfa.current_ptr_index] = c;
-                            dfa.current_ptr_index += 1;
+                            try self.value.append(c);
+                            self.current_ptr_index += 1;
                         } else {
-                            dfa.state = State.FAILED;
-                            dfa.current_ptr_index = 0;
+                            self.state = State.FAILED;
+                            self.current_ptr_index = 0;
                         }
                     },
                     3 => {
                         if (c == 'e') {
-                            ptr[dfa.current_ptr_index] = c;
-                            dfa.current_ptr_index += 1;
+                            try self.value.append(c);
+                            self.current_ptr_index += 1;
                         } else {
-                            dfa.state = State.FAILED;
-                            dfa.current_ptr_index = 0;
+                            self.state = State.FAILED;
+                            self.current_ptr_index = 0;
                         }
                     },
                     4 => {
                         if (c == 'c') {
-                            ptr[dfa.current_ptr_index] = c;
-                            dfa.current_ptr_index += 1;
+                            try self.value.append(c);
+                            self.current_ptr_index += 1;
                         } else {
-                            dfa.state = State.FAILED;
-                            dfa.current_ptr_index = 0;
+                            self.state = State.FAILED;
+                            self.current_ptr_index = 0;
                         }
                     },
                     5 => {
                         if (c == 't') {
-                            ptr[dfa.current_ptr_index] = c;
-                            dfa.state = State.NULL;
-                            dfa.current_ptr_index = 0;
+                            try self.value.append(c);
+                            self.state = State.NULL;
+                            self.current_ptr_index = 0;
                         } else {
-                            dfa.state = State.FAILED;
-                            dfa.current_ptr_index = 0;
+                            self.state = State.FAILED;
+                            self.current_ptr_index = 0;
                         }
                     },
                     else => {},
@@ -77,7 +76,7 @@ pub const SelectDFA = struct {
             // when and if the state machine is in the failed state, we will be paniced for current incoming input character.
             State.FAILED => unreachable,
         }
-        return dfa.state;
+        return self.state;
     }
 };
 pub const StarDFA = struct {
@@ -454,7 +453,7 @@ pub fn tokenize(string: []const u8) !TokenizeResult {
 }
 
 fn scan(string: []const u8) !std.ArrayList(EvaluateResult) {
-    var select_dfa = SelectDFA{ .state = State.NULL };
+    var select_dfa = SelectDFA{};
     var from_dfa = FromDFA{};
     var star_dfa = StarDFA{};
     var double_quote_dfa = DoubleQuoteStringDFA{};
@@ -474,37 +473,45 @@ fn scan(string: []const u8) !std.ArrayList(EvaluateResult) {
         std.debug.print("\ntry to dispatch letter '{c}' to leading dfa of a statement.", .{c});
 
         // suspect select statement
-        if (select_dfa.transition(c) == State.START) {
+        if (try select_dfa.transition(c) == State.START) {
             std.debug.print("\nhit select_dfa", .{});
             select_dfa.col[0] = i;
             var j = i + 1;
-            while (select_dfa.transition(string[j]) == State.ACCEPTING) {
+            while (j + 1 < string.len and try select_dfa.transition(string[j]) == State.ACCEPTING) {
                 j += 1;
             }
             // move i pointer
             i = j + 1;
             if (select_dfa.state == State.FAILED) {
                 // Generally, if dfa went something wrong such as State.FAILED
-                try stderr.print("\nselect_dfa failed with: {s}\n", .{select_dfa.value});
+                try stderr.print("\nselect_dfa failed with: {s}\n", .{select_dfa.value.items});
                 return TokenizeError.StateFailed;
             } else {
                 select_dfa.col[1] = j;
-                std.debug.print("\nselect_dfa accepted: \x1B[32m{s}\x1B[0m", .{select_dfa.value});
+                std.debug.print("\nselect_dfa accepted: \x1B[32m{s}\x1B[0m", .{select_dfa.value.items});
                 try evaluations.append(evaluate(Lexeme{ .select = select_dfa }));
+                select_dfa.value.clearAndFree();
+            }
+
+            // stripe whitespace
+            while (string[i] == ' ' or string[i] == '\n') {
+                i += 1;
             }
 
             // suspect `regular column` segment, could be extended to `function-call column`.
             if (star_dfa.transition(string[i]) == State.START) {
                 // just make dfa complete
                 star_dfa.col[0] = i;
-                _ = star_dfa.transition(' ');
-                star_dfa.col[1] = i;
+                _ = star_dfa.transition('*');
+                star_dfa.col[1] = i + 1;
                 std.debug.print("\nstar_dfa accepted: \x1B[32m{s}\x1B[0m", .{star_dfa.value});
                 try evaluations.append(evaluate(Lexeme{ .star = star_dfa }));
                 // move i pointer
                 i += 1;
                 if (i == string.len) break :scan_loop;
             } else {
+                // guarantee to access valid memory of a slice
+                if (i + 3 >= string.len) break :scan_loop;
                 // forward four letter
                 while (string[i] != 'f' or string[i + 1] != 'r' or string[i + 2] != 'o' or string[i + 3] != 'm') {
                     if (try column_dfa.transition(string[i]) == State.START) {
@@ -556,6 +563,11 @@ fn scan(string: []const u8) !std.ArrayList(EvaluateResult) {
                 if (i == string.len) break :scan_loop;
             }
 
+            // stripe whitespace
+            while (string[i] == ' ' or string[i] == '\n') {
+                i += 1;
+            }
+
             // suspect `table` segment
             if (try table_dfa.transition(string[i]) == State.START) {
                 table_dfa.col[0] = i;
@@ -579,6 +591,11 @@ fn scan(string: []const u8) !std.ArrayList(EvaluateResult) {
                 // move `i` cursor
                 i = k + 1;
                 if (i == string.len) break :scan_loop;
+            }
+
+            // stripe whitespace
+            while (string[i] == ' ' or string[i] == '\n') {
+                i += 1;
             }
 
             // suspect `order by` segment
@@ -773,7 +790,7 @@ test "A regular evaluated statement in DQL" {
     const result = try tokenize(string);
     std.debug.print("------------ Evaluations as Result below: \n", .{});
     for (result.evaluations.items) |evaluation| {
-        std.debug.print("category: {}, value: {c}, string index from {} to {}\n", .{ evaluation.category, evaluation.value, evaluation.col[0], evaluation.col[1] });
+        std.debug.print("category: {}, value: {s}, indexes from {} to {}\n", .{ evaluation.category, evaluation.value, evaluation.col[0], evaluation.col[1] });
     }
 }
 
