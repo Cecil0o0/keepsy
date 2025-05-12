@@ -1,10 +1,16 @@
 const tokenizer = @import("./tokenizer.zig");
-const generator = @import("./parquet-generator.zig");
+const std = @import("std");
 
 pub fn main() !void {
-    // const string = "select from";
+    var iter = try std.process.argsWithAllocator(std.heap.page_allocator);
+    std.debug.print("Base address is 0x{x}", .{std.process.getBaseAddress()});
+    // skip the first argument
+    _ = iter.skip();
 
-    // _ = try tokenizer.tokenize(string);
-
-    try generator.writeFile();
+    if (iter.next()) |dql| {
+        std.debug.print("\nAccept dql: {s}", .{dql});
+        _ = try tokenizer.tokenize(dql);
+    } else {
+        std.debug.print("No arguments provided.\n", .{});
+    }
 }

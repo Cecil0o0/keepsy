@@ -1,0 +1,10 @@
+{
+    "scripts": {
+        "web:dev": "bun src/web-ui/serve.ts --watch",
+        "test": "bun run build && bun test",
+        "build": "zig build"
+    },
+    "dependencies": {
+        "bun-types": "1.2.13"
+    }
+}

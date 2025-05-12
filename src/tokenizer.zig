@@ -174,8 +174,12 @@ pub const ColumnDFA = struct {
                 try self.value.append(c);
             },
             State.START => {
-                self.state = State.ACCEPTING;
                 try self.value.append(c);
+                if (c == ',' or c == ' ') {
+                    self.state = State.NULL;
+                } else {
+                    self.state = State.ACCEPTING;
+                }
             },
             State.ACCEPTING => {
                 try self.value.append(c);
@@ -241,7 +245,7 @@ pub const OrderByDFA = struct {
                 }
             },
             State.ACCEPTING => {
-                if (c == ' ' and self.pointer == 8) {
+                if ((c == ' ' or c == ';') and self.pointer == 8) {
                     self.state = State.NULL;
                     self.pointer = 0;
                 } else {
@@ -267,7 +271,11 @@ pub const OrderByItemDFA = struct {
                 }
             },
             State.START => {
-                self.state = State.ACCEPTING;
+                if (c == ' ' or c == ';') {
+                    self.state = State.NULL;
+                } else {
+                    self.state = State.ACCEPTING;
+                }
                 try self.value.append(c);
             },
             State.ACCEPTING => {
@@ -515,7 +523,7 @@ fn scan(string: []const u8) !std.ArrayList(EvaluateResult) {
                 // forward four letter
                 while (string[i] != 'f' or string[i + 1] != 'r' or string[i + 2] != 'o' or string[i + 3] != 'm') {
                     if (try column_dfa.transition(string[i]) == State.START) {
-                        var k = i;
+                        var k = i + 1;
                         column_dfa.col[0] = k;
                         while (try column_dfa.transition(string[k]) == State.ACCEPTING) {
                             k += 1;
