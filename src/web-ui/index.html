@@ -1,20 +1,33 @@
 <!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Document</title>
-  </head>
-  <body>
-    <script type="module">
-      const importObject = {
-        my_namespace: { imported_func: (arg) => console.log(arg) },
-      };
-      WebAssembly.instantiateStreaming(fetch("keepsy.wasm"), importObject).then(
-        (results) => {
-          // Do something with the results!
-        }
-      );
-    </script>
-  </body>
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Document</title>
+</head>
+
+<body>
+  <script type="module">
+    const importObject = {
+      wasi_snapshot_preview1: {
+        proc_exit: (code) => {
+          console.log(`proc_exit: ${code}`);
+        },
+        fd_write: (fd, iovs, iovs_len, nwritten) => {
+          console.log(`fd_write: ${fd} ${iovs} ${iovs_len} ${nwritten}`);
+        },
+        fd_read: (fd, iovs, iov) => { }
+      }
+    }
+    WebAssembly.instantiateStreaming(fetch("keepsy.wasm"), importObject).then(
+      (results) => {
+        // Do something with the results!
+        // results.instance.exports._start()
+        console.log(results);
+      }
+    );
+  </script>
+</body>
+
 </html>

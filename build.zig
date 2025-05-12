@@ -53,7 +53,7 @@ pub fn build(b: *std.Build) !void {
 
     const wasm_mod = b.createModule(.{
         .root_source_file = b.path("src/wasm.zig"),
-        .target = b.resolveTargetQuery(.{ .cpu_arch = .wasm64, .os_tag = .wasi }),
+        .target = b.resolveTargetQuery(.{ .cpu_arch = .wasm32, .os_tag = .wasi }),
         .optimize = .ReleaseSmall,
     });
     const exe_wasm = b.addExecutable(.{
