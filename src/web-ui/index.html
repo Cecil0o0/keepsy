@@ -9,22 +9,11 @@
 
 <body>
   <script type="module">
-    const importObject = {
-      wasi_snapshot_preview1: {
-        proc_exit: (code) => {
-          console.log(`proc_exit: ${code}`);
-        },
-        fd_write: (fd, iovs, iovs_len, nwritten) => {
-          console.log(`fd_write: ${fd} ${iovs} ${iovs_len} ${nwritten}`);
-        },
-        fd_read: (fd, iovs, iov) => { }
-      }
-    }
+    const importObject = {}
     WebAssembly.instantiateStreaming(fetch("keepsy.wasm"), importObject).then(
       (results) => {
-        // Do something with the results!
-        // results.instance.exports._start()
         console.log(results);
+        console.log('results.instance.exports.add(1, 2)', results.instance.exports.add(1, 2));
       }
     );
   </script>

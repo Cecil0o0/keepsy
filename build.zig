@@ -50,15 +50,4 @@ pub fn build(b: *std.Build) !void {
     // This will evaluate the `run` step rather than the default, which is "install".
     const run_step = b.step("run", "Run the app");
     run_step.dependOn(&run_cmd.step);
-
-    const wasm_mod = b.createModule(.{
-        .root_source_file = b.path("src/wasm.zig"),
-        .target = b.resolveTargetQuery(.{ .cpu_arch = .wasm32, .os_tag = .wasi }),
-        .optimize = .ReleaseSmall,
-    });
-    const exe_wasm = b.addExecutable(.{
-        .name = "keepsy",
-        .root_module = wasm_mod,
-    });
-    b.installArtifact(exe_wasm);
 }
