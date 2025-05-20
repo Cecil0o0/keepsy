@@ -1,4 +1,4 @@
-const tokenizer = @import("./tokenizer.zig");
+const tokenizer = @import("./lexical-tokenizer.zig");
 const std = @import("std");
 
 pub fn main() !void {
