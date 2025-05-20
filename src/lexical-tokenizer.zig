@@ -1,7 +1,7 @@
 //! alias scanner
 const std = @import("std");
-const evaluate = @import("./evaluator.zig").evaluate;
-const EvaluateResult = @import("./evaluator.zig").EvaluateResult;
+const evaluate = @import("./lexical-evaluator.zig").evaluate;
+const EvaluateResult = @import("./lexical-evaluator.zig").EvaluateResult;
 
 // reference: https://en.wikipedia.org/wiki/Deterministic_finite_automaton
 const State = enum { NULL, START, ACCEPTING, FAILED };

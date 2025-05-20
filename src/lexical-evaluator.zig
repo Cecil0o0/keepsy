@@ -1,13 +1,13 @@
 const std = @import("std");
-const LexemeTag = @import("./tokenizer.zig").LexemeTag;
-const Lexeme = @import("./tokenizer.zig").Lexeme;
-const SelectDFA = @import("./tokenizer.zig").SelectDFA;
-const FromDFA = @import("./tokenizer.zig").FromDFA;
-const ColumnDFA = @import("./tokenizer.zig").ColumnDFA;
-const TableDFA = @import("./tokenizer.zig").TableDFA;
-const OrderByDFA = @import("./tokenizer.zig").OrderByDFA;
-const OrderByItemDFA = @import("./tokenizer.zig").OrderByItemDFA;
-const OrderByDirectionDFA = @import("./tokenizer.zig").OrderByDirectionDFA;
+const LexemeTag = @import("./lexical-tokenizer.zig").LexemeTag;
+const Lexeme = @import("./lexical-tokenizer.zig").Lexeme;
+const SelectDFA = @import("./lexical-tokenizer.zig").SelectDFA;
+const FromDFA = @import("./lexical-tokenizer.zig").FromDFA;
+const ColumnDFA = @import("./lexical-tokenizer.zig").ColumnDFA;
+const TableDFA = @import("./lexical-tokenizer.zig").TableDFA;
+const OrderByDFA = @import("./lexical-tokenizer.zig").OrderByDFA;
+const OrderByItemDFA = @import("./lexical-tokenizer.zig").OrderByItemDFA;
+const OrderByDirectionDFA = @import("./lexical-tokenizer.zig").OrderByDirectionDFA;
 const LexicalCategory = enum {
     // Names assigned by the programmer
     identifier,
