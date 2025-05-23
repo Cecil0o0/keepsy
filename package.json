@@ -2,7 +2,7 @@
     "scripts": {
         "web:dev": "bun src/web-ui/serve.ts --watch",
         "test": "bun run build && bun test",
-        "build:wasm": "zig build-exe src/wasm.zig -target wasm32-freestanding -fno-entry --export=add && rm wasm.wasm.o && mv wasm.wasm zig-out/bin/keepsy.wasm",
+        "build:wasm": "zig build-exe src/wasm.zig -target wasm32-freestanding -fno-entry --export=add --export=tokenize && rm wasm.wasm.o && mv wasm.wasm zig-out/bin/keepsy.wasm",
         "build:executable": "zig build",
         "build": "bun run build:executable && bun run build:wasm"
     },

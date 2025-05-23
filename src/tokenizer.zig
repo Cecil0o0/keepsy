@@ -494,8 +494,9 @@ pub const Lexeme = union(LexemeTag) {
     where_condition: WhereConditionDFA,
 };
 const TokenizeError = error{ StateFailed, DispatchFailed, IndexedExceedFailed };
-const stderr = std.io.getStdErr().writer();
-const TokenizeResult = struct { original: []const u8, evaluations: std.ArrayList(EvaluateResult) };
+// const stderr = std.io.getStdErr().writer();
+const stderr = std.debug;
+pub const TokenizeResult = struct { original: []const u8, evaluations: std.ArrayList(EvaluateResult) };
 
 pub fn tokenize(string: []const u8) !TokenizeResult {
     const evaluations = try scan(string);
@@ -539,7 +540,7 @@ fn scan(string: []const u8) !std.ArrayList(EvaluateResult) {
             // move i pointer
             i = j + 1;
             if (select_dfa.state == State.FAILED) {
-                try stderr.print("\ndrop this candidate since it can not be complete in a valid solution: {s}\n", .{select_dfa.value.items});
+                stderr.print("\ndrop this candidate since it can not be complete in a valid solution: {s}\n", .{select_dfa.value.items});
                 return TokenizeError.StateFailed;
             } else {
                 select_dfa.col[1] = j;
@@ -578,7 +579,7 @@ fn scan(string: []const u8) !std.ArrayList(EvaluateResult) {
                         }
                         if (column_dfa.state == State.FAILED) {
                             // Generally, if dfa went something wrong such as State.FAILED
-                            try stderr.print("\ncolumn_dfa failed with: {s}\n", .{column_dfa.value.items});
+                            stderr.print("\ncolumn_dfa failed with: {s}\n", .{column_dfa.value.items});
                             return TokenizeError.StateFailed;
                         } else {
                             column_dfa.col[1] = k;
@@ -612,7 +613,7 @@ fn scan(string: []const u8) !std.ArrayList(EvaluateResult) {
             }
             // Generally, if dfa went something wrong such as State.FAILED
             if (table_dfa.state == State.FAILED) {
-                try stderr.print("\ntable_dfa failed with: {s}\n", .{table_dfa.value.items});
+                stderr.print("\ntable_dfa failed with: {s}\n", .{table_dfa.value.items});
                 return TokenizeError.StateFailed;
             } else {
                 table_dfa.col[1] = k;
@@ -634,7 +635,7 @@ fn scan(string: []const u8) !std.ArrayList(EvaluateResult) {
             }
             // Generally, if dfa went something wrong such as State.FAILED
             if (from_dfa.state == State.FAILED) {
-                try stderr.print("\nfrom_dfa failed with: {s}\n", .{from_dfa.value});
+                stderr.print("\nfrom_dfa failed with: {s}\n", .{from_dfa.value});
                 return TokenizeError.StateFailed;
             } else {
                 from_dfa.col[1] = k;
@@ -654,7 +655,7 @@ fn scan(string: []const u8) !std.ArrayList(EvaluateResult) {
                 condition_k += 1;
             }
             if (where_condition_dfa.state == State.FAILED) {
-                try stderr.print("\ncondition_dfa failed with: {s}\n", .{where_condition_dfa.value.items});
+                stderr.print("\ncondition_dfa failed with: {s}\n", .{where_condition_dfa.value.items});
                 return TokenizeError.StateFailed;
             } else {
                 std.debug.print("\ncondition_dfa accepted: \x1B[32m{s}\x1B[0m", .{where_condition_dfa.value.items});
@@ -672,7 +673,7 @@ fn scan(string: []const u8) !std.ArrayList(EvaluateResult) {
                 k += 1;
             }
             if (where_dfa.state == State.FAILED) {
-                try stderr.print("\nwhere_dfa failed with: {s}\n", .{where_dfa.value.items});
+                stderr.print("\nwhere_dfa failed with: {s}\n", .{where_dfa.value.items});
                 return TokenizeError.StateFailed;
             } else {
                 std.debug.print("\nwhere_dfa accepted: \x1B[32m{s}\x1B[0m", .{where_dfa.value.items});
@@ -692,7 +693,7 @@ fn scan(string: []const u8) !std.ArrayList(EvaluateResult) {
                 k += 1;
             }
             if (order_by_dir_dfa.state == State.FAILED) {
-                try stderr.print("\norder_by_dir_dfa failed with: {s}\n", .{order_by_dir_dfa.value});
+                stderr.print("\norder_by_dir_dfa failed with: {s}\n", .{order_by_dir_dfa.value});
                 return TokenizeError.StateFailed;
             } else {
                 std.debug.print("\norder_by_dir_dfa accepted: \x1B[32m{s}\x1B[0m", .{order_by_dir_dfa.value});
@@ -712,7 +713,7 @@ fn scan(string: []const u8) !std.ArrayList(EvaluateResult) {
                 k += 1;
             }
             if (order_by_item_dfa.state == State.FAILED) {
-                try stderr.print("\norder_by_item_dfa failed with: {s}\n", .{order_by_item_dfa.value.items});
+                stderr.print("\norder_by_item_dfa failed with: {s}\n", .{order_by_item_dfa.value.items});
                 return TokenizeError.StateFailed;
             } else {
                 std.debug.print("\norder_by_item_dfa accepted: \x1B[32m{s}\x1B[0m", .{order_by_item_dfa.value.items});
@@ -733,7 +734,7 @@ fn scan(string: []const u8) !std.ArrayList(EvaluateResult) {
                 k += 1;
             }
             if (order_by_dfa.state == State.FAILED) {
-                try stderr.print("\norder_by_dfa failed with: {s}\n", .{order_by_dfa.value});
+                stderr.print("\norder_by_dfa failed with: {s}\n", .{order_by_dfa.value});
                 return TokenizeError.StateFailed;
             } else {
                 std.debug.print("\norder_by_dfa accepted: \x1B[32m{s}\x1B[0m", .{order_by_dfa.value});
@@ -751,7 +752,7 @@ fn scan(string: []const u8) !std.ArrayList(EvaluateResult) {
                 k += 1;
             }
             if (number_dfa.state == State.FAILED) {
-                try stderr.print("\nnumber_dfa failed with: {s}\n", .{number_dfa.value.items});
+                stderr.print("\nnumber_dfa failed with: {s}\n", .{number_dfa.value.items});
                 return TokenizeError.StateFailed;
             } else {
                 std.debug.print("\nnumber_dfa accepted: \x1B[32m{s}\x1B[0m", .{number_dfa.value.items});
@@ -771,7 +772,7 @@ fn scan(string: []const u8) !std.ArrayList(EvaluateResult) {
                 k += 1;
             }
             if (limit_dfa.state == State.FAILED) {
-                try stderr.print("\nlimit_dfa failed with: {s}\n", .{limit_dfa.value.items});
+                stderr.print("\nlimit_dfa failed with: {s}\n", .{limit_dfa.value.items});
                 return TokenizeError.StateFailed;
             } else {
                 std.debug.print("\nlimit_dfa accepted: \x1B[32m{s}\x1B[0m", .{limit_dfa.value.items});
@@ -795,7 +796,7 @@ fn scan(string: []const u8) !std.ArrayList(EvaluateResult) {
             i = j + 1;
             // Generally, if dfa went something wrong such as State.FAILED
             if (double_quote_dfa.state == State.FAILED) {
-                try stderr.print("\ndouble_quote_dfa failed with: {s}\n", .{double_quote_dfa.value.items});
+                stderr.print("\ndouble_quote_dfa failed with: {s}\n", .{double_quote_dfa.value.items});
                 return TokenizeError.StateFailed;
             } else {
                 double_quote_dfa.col[1] = j;

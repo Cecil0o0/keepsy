@@ -4,6 +4,6 @@
     },
     "include": [
         "./src/web-ui",
-        "node_modules/bun-types/index.d.ts"
+        "node_modules/bun-types"
     ]
 }

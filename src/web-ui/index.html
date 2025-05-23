@@ -1,22 +1,47 @@
 <!DOCTYPE html>
 <html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Document</title>
+  </head>
 
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Document</title>
-</head>
-
-<body>
-  <script type="module">
-    const importObject = {}
-    WebAssembly.instantiateStreaming(fetch("keepsy.wasm"), importObject).then(
-      (results) => {
-        console.log(results);
-        console.log('results.instance.exports.add(1, 2)', results.instance.exports.add(1, 2));
-      }
-    );
-  </script>
-</body>
-
+  <body>
+    <script type="module">
+      let memory;
+      const importObject = {
+        env: {
+          print: (...params) => {
+            console.log(...params);
+          },
+          print_string: (pointer, length) => {
+            const slice = new Uint8Array(
+              memory.buffer, // memory exported from Zig
+              pointer,
+              length
+            );
+            const text = new TextDecoder().decode(slice);
+            console.log(text);
+          },
+        },
+      };
+      WebAssembly.instantiateStreaming(fetch("keepsy.wasm"), importObject).then(
+        (results) => {
+          console.log(results);
+          memory = results.instance.exports.memory;
+          console.log(
+            "results.instance.exports.add(1, 2)",
+            results.instance.exports.add(1, 2)
+          );
+          console.log(
+            "results.instance.exports.tokenize()",
+            results.instance.exports.tokenize(
+              "Select * from users;",
+              "Select * from users;".length
+            )
+          );
+        }
+      );
+    </script>
+  </body>
 </html>
