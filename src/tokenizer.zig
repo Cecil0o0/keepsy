@@ -184,11 +184,11 @@ pub const ColumnDFA = struct {
                 try self.value.append(c);
             },
             State.START => {
-                try self.value.append(c);
                 if (c == ',' or c == ' ') {
                     self.state = State.NULL;
                 } else {
                     self.state = State.ACCEPTING;
+                    try self.value.append(c);
                 }
             },
             State.ACCEPTING => {
