@@ -2,8 +2,8 @@
 
 ## Summary
 
-As annouced by zig orgnization that it is a small simple programming language with no hidden control flow, no hidden allocations, no preprocessors no mcros, it means we could and should focus on debugging our application rather than the knowledge of programming language. Based on that our users also could choose both performance and safety for application development with the powerful comprehensive comptime optimization implemented by native compiler.
-正如 zig 组织宣称的那样它是一门小巧简单的编程语言，没有隐藏控制流，没有隐藏内存分配，没有预处理器没有宏，这意味着我们能够聚焦于调试我们的应用程序而不是编程语言知识。基于此我们用户也能够在应用程序开发中同时选择性能和安全性，通过由原生编译器实施的强大全面的编译时优化。
+As annouced by zig orgnization that it is a small simple programming language with no hidden control flow, no hidden allocations, no preprocessors no macros, it means we could and should focus on debugging our application rather than the knowledge of programming language. Programmers could also choose both performance and safety when develop an application of programming language with the powerful comprehensive comptime optimization provided by the programming language compiler.
+正如 zig 组织宣称的那样它是一门小巧简单的编程语言，没有隐藏控制流，没有隐藏内存分配，没有预处理器没有宏，这意味着我们能够聚焦于调试我们的应用程序而不是编程语言知识。通过由编程语言编译器所提供的强大而全面的编译时优化，编程人员也可以当开发编程语言应用时在性能和安全性中选择两者。
 
 ## Motivation
 
