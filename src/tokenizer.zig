@@ -173,6 +173,42 @@ pub const DoubleQuoteStringDFA = struct {
         return dfa.state;
     }
 };
+pub const BareStringDFA = struct {
+    state: State = State.NULL,
+    value: std.ArrayList(u8) = std.ArrayList(u8).init(std.heap.page_allocator),
+    col: [2]u32 = [2]u32{ 0, 0 },
+    fn transition(self: *BareStringDFA, c: u8) !State {
+        switch (self.state) {
+            State.NULL => {
+                if (std.ascii.isAlphanumeric(c)) {
+                    self.state = State.START;
+                    try self.value.append(c);
+                }
+            },
+            State.START => {
+                if (c == ' ') {
+                    self.state = State.NULL;
+                } else if (std.ascii.isAlphanumeric(c)) {
+                    try self.value.append(c);
+                    self.state = State.ACCEPTING;
+                } else {
+                    self.state = State.FAILED;
+                }
+            },
+            State.ACCEPTING => {
+                if (c == ' ') {
+                    self.state = State.NULL;
+                } else if (std.ascii.isAlphanumeric(c)) {
+                    try self.value.append(c);
+                } else {
+                    self.state = State.FAILED;
+                }
+            },
+            else => {},
+        }
+        return self.state;
+    }
+};
 pub const ColumnDFA = struct {
     state: State = State.NULL,
     value: std.ArrayList(u8) = std.ArrayList(u8).init(std.heap.page_allocator),
@@ -461,6 +497,38 @@ pub const WhereConditionDFA = struct {
         return self.state;
     }
 };
+pub const WithDFA = struct {
+    state: State = State.NULL,
+    value: std.ArrayList(u8) = std.ArrayList(u8).init(std.heap.page_allocator),
+    col: [2]u32 = [2]u32{ 0, 0 },
+    fn transition(self: *WithDFA, c: u8) !State {
+        switch (self.state) {
+            State.NULL => {
+                if (c == 'w') {
+                    self.state = State.START;
+                    try self.value.append(c);
+                }
+            },
+            State.START => {
+                if (c == 'i') {
+                    self.state = State.ACCEPTING;
+                    try self.value.append(c);
+                } else {
+                    self.state = State.FAILED;
+                }
+            },
+            State.ACCEPTING => {
+                if (c == ' ' or c == ';' or c == '\n') {
+                    self.state = State.FAILED;
+                } else {
+                    try self.value.append(c);
+                }
+            },
+            else => {},
+        }
+        return self.state;
+    }
+};
 pub const LexemeTag = enum {
     // for zls format with multiple lines when encounters `enum` type
     select,
@@ -476,6 +544,9 @@ pub const LexemeTag = enum {
     limit_number,
     where,
     where_condition,
+    with,
+    temporary_table,
+    left_parenthesis,
 };
 pub const Lexeme = union(LexemeTag) {
     // for zls format with multiple lines when encounters `enum` type
@@ -492,9 +563,11 @@ pub const Lexeme = union(LexemeTag) {
     limit_number: NumberDFA,
     where: WhereDFA,
     where_condition: WhereConditionDFA,
+    with: WithDFA,
+    temporary_table: BareStringDFA,
+    left_parenthesis: BareStringDFA,
 };
 const TokenizeError = error{ StateFailed, DispatchFailed, IndexedExceedFailed };
-// const stderr = std.io.getStdErr().writer();
 const stderr = std.debug;
 pub const TokenizeResult = struct { original: []const u8, evaluations: std.ArrayList(EvaluateResult) };
 
@@ -517,6 +590,8 @@ fn scan(string: []const u8) !std.ArrayList(EvaluateResult) {
     var number_dfa = NumberDFA{};
     var where_dfa = WhereDFA{};
     var where_condition_dfa = WhereConditionDFA{};
+    var with_dfa = WithDFA{};
+    var bare_string_dfa = BareStringDFA{};
     var token: std.ArrayList(u8) = std.ArrayList(u8).init(std.heap.page_allocator);
     var lexeme_tag: LexemeTag = undefined;
     var i: u32 = 0;
@@ -528,9 +603,43 @@ fn scan(string: []const u8) !std.ArrayList(EvaluateResult) {
         }
 
         const c = string[i];
-        // std.debug.print("\ntry to dispatch letter '{c}' to leading dfa of a statement.", .{c});
+        if (token.items.len == 0 and try with_dfa.transition(c) == State.START) {
+            with_dfa.col[0] = i;
+            var j = i + 1;
+            while (j + 1 < string.len and try with_dfa.transition(string[j]) == State.ACCEPTING) {
+                j += 1;
+            }
+            i = j + 1;
+            if (select_dfa.state == State.FAILED) {
+                stderr.print("\ndrop this candidate since it can not be complete in a valid solution: {s}\n", .{with_dfa.value.items});
+                return TokenizeError.StateFailed;
+            } else {
+                with_dfa.col[1] = j;
+                std.debug.print("\nwith_dfa accepted: \x1B[32m{s}\x1B[0m", .{with_dfa.value.items});
+
+                try evaluations.append(evaluate(Lexeme{ .with = with_dfa }));
+                if (try bare_string_dfa.transition(string[with_dfa.col[1] + 1]) == State.START) {
+                    var k = with_dfa.col[1] + 2;
+                    while (k + 1 < string.len and try bare_string_dfa.transition(string[k]) == State.ACCEPTING) {
+                        k += 1;
+                    }
+                    // move i pointer
+                    i = k + 1;
+                    if (bare_string_dfa.state == State.FAILED) {
+                        stderr.print("\ndrop this candidate since it can not be complete in a valid solution: {s}\n", .{bare_string_dfa.value.items});
+                        return TokenizeError.StateFailed;
+                    } else {
+                        bare_string_dfa.col[1] = k;
+                        std.debug.print("\nbare_string_dfa accepted: \x1B[32m{s}\x1B[0m", .{bare_string_dfa.value.items});
+                        try evaluations.append(evaluate(Lexeme{ .temporary_table = bare_string_dfa }));
+                        token.clearAndFree();
+                        try token.appendSlice(bare_string_dfa.value.items);
+                    }
+                }
+            }
+        }
         // suspect select token as a candidate
-        if (token.items.len == 0 and try select_dfa.transition(c) == State.START) {
+        else if (try select_dfa.transition(c) == State.START) {
             std.debug.print("\nhit select_dfa", .{});
             select_dfa.col[0] = i;
             var j = i + 1;
@@ -718,7 +827,7 @@ fn scan(string: []const u8) !std.ArrayList(EvaluateResult) {
             } else {
                 std.debug.print("\norder_by_item_dfa accepted: \x1B[32m{s}\x1B[0m", .{order_by_item_dfa.value.items});
                 try evaluations.append(evaluate(Lexeme{ .order_by_item = order_by_item_dfa }));
-                order_by_item_dfa.value.clearAndFree();
+                token.clearAndFree();
                 try token.appendSlice(order_by_item_dfa.value.items);
                 lexeme_tag = LexemeTag.order_by_item;
                 order_by_item_dfa.value.clearAndFree();
@@ -803,6 +912,13 @@ fn scan(string: []const u8) !std.ArrayList(EvaluateResult) {
                 std.debug.print("\ndouble_quote_dfa accepted: \x1B[32m{s}\x1B[0m", .{double_quote_dfa.value.items});
                 try evaluations.append(evaluate(Lexeme{ .double_quote_string = double_quote_dfa }));
             }
+        } else if (c == '(') {
+            std.debug.print("\nleft_parenthesis accepted: \x1B[32m{c}\x1B[0m", .{'('});
+            try evaluations.append(evaluate(Lexeme{ .left_parenthesis = BareStringDFA{ .col = [2]u32{ i, i } } }));
+            token.clearAndFree();
+            try token.append('(');
+            lexeme_tag = LexemeTag.left_parenthesis;
+            i += 1;
         } else if (c == ' ') {
             std.debug.print("\nLeading whitespace character will be ignored for now.", .{});
             i += 1;
@@ -810,7 +926,7 @@ fn scan(string: []const u8) !std.ArrayList(EvaluateResult) {
             std.debug.print("\nEncounter statement terminate character", .{});
             i += 1;
         } else {
-            std.debug.print(" This letter don't match any defined dfa", .{});
+            std.debug.print("\nThis letter '{c}' don't match any defined dfa", .{c});
             i += 1;
         }
     }
@@ -850,7 +966,7 @@ test "Two statements in DQL" {
     try std.testing.expectEqualStrings(string, result.original);
 }
 
-test "full example" {
+test "full basic example" {
     const string =
         \\ select first_name, last_name, hire_date
         \\ from employees
@@ -858,6 +974,12 @@ test "full example" {
         \\ limit 40000
         \\ where hire_date < 1746803432 or Country='Mexico';
     ;
+    const result = try tokenize(string);
+    try std.testing.expectEqualStrings(string, result.original);
+}
+
+test "with temporaryTable statement" {
+    const string = "with temporaryTable (averageValue) as ( select avg(salary) from employee );";
     const result = try tokenize(string);
     try std.testing.expectEqualStrings(string, result.original);
 }

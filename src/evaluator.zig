@@ -73,5 +73,14 @@ pub fn evaluate(lexem: Lexeme) EvaluateResult {
         LexemeTag.where_condition => {
             return EvaluateResult{ .category = LexicalCategory.literal, .value = lexem.where_condition.value.items, .col = lexem.where_condition.col };
         },
+        LexemeTag.with => {
+            return EvaluateResult{ .category = LexicalCategory.keyword, .value = lexem.with.value.items, .col = lexem.with.col };
+        },
+        LexemeTag.temporary_table => {
+            return EvaluateResult{ .category = LexicalCategory.literal, .value = lexem.temporary_table.value.items, .col = lexem.temporary_table.col };
+        },
+        LexemeTag.left_parenthesis => {
+            return EvaluateResult{ .category = LexicalCategory.punctuator, .value = "c", .col = lexem.left_parenthesis.col };
+        },
     }
 }
