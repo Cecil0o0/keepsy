@@ -667,7 +667,7 @@ fn scan(string: []const u8) !std.ArrayList(EvaluateResult) {
                 // just make dfa complete
                 star_dfa.col[0] = i;
                 _ = star_dfa.transition('*');
-                star_dfa.col[1] = i + 1;
+                star_dfa.col[1] = i;
                 std.debug.print("\nstar_dfa accepted: \x1B[32m{s}\x1B[0m", .{star_dfa.value});
                 try evaluations.append(evaluate(Lexeme{ .star = star_dfa }));
                 token.clearAndFree();
@@ -952,11 +952,11 @@ test "A regular statement in DQL" {
 }
 
 test "A regular evaluated statement in DQL" {
-    const string = "select * from \"user\";";
+    const string = "select * from user;";
     const result = try tokenize(string);
     std.debug.print("------------ Evaluations as Result below: \n", .{});
     for (result.evaluations.items) |evaluation| {
-        std.debug.print("category: {}, value: {s}, indexes from {} to {}\n", .{ evaluation.category, evaluation.value, evaluation.col[0], evaluation.col[1] });
+        std.debug.print("category: {}, value: {d}, indexes from {} to {}\n", .{ evaluation.category, evaluation.value.len, evaluation.col[0], evaluation.col[1] });
     }
 }
 
