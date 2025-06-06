@@ -529,6 +529,31 @@ pub const WithDFA = struct {
         return self.state;
     }
 };
+pub const AsDFA = struct {
+    state: State = State.NULL,
+    value: std.ArrayList(u8) = std.ArrayList(u8).init(std.heap.page_allocator),
+    col: [2]u32 = [2]u32{ 0, 0 },
+    fn transition(self: *AsDFA, c: u8) !State {
+        switch (self.state) {
+            State.NULL => {
+                if (c == 'a') {
+                    self.state = State.START;
+                    try self.value.append(c);
+                }
+            },
+            State.START => {
+                if (c == 's') {
+                    self.state = State.NULL;
+                    try self.value.append(c);
+                } else {
+                    self.state = State.FAILED;
+                }
+            },
+            else => unreachable,
+        }
+        return self.state;
+    }
+};
 pub const LexemeTag = enum {
     // for zls format with multiple lines when encounters `enum` type
     select,
@@ -547,6 +572,8 @@ pub const LexemeTag = enum {
     with,
     temporary_table,
     left_parenthesis,
+    right_parenthesis,
+    as,
 };
 pub const Lexeme = union(LexemeTag) {
     // for zls format with multiple lines when encounters `enum` type
@@ -566,6 +593,8 @@ pub const Lexeme = union(LexemeTag) {
     with: WithDFA,
     temporary_table: BareStringDFA,
     left_parenthesis: BareStringDFA,
+    right_parenthesis: BareStringDFA,
+    as: AsDFA,
 };
 const TokenizeError = error{ StateFailed, DispatchFailed, IndexedExceedFailed };
 const stderr = std.debug;
@@ -592,12 +621,13 @@ fn scan(string: []const u8) !std.ArrayList(EvaluateResult) {
     var where_condition_dfa = WhereConditionDFA{};
     var with_dfa = WithDFA{};
     var bare_string_dfa = BareStringDFA{};
+    var as_dfa = AsDFA{};
     var token: std.ArrayList(u8) = std.ArrayList(u8).init(std.heap.page_allocator);
     var lexeme_tag: LexemeTag = undefined;
     var i: u32 = 0;
     var evaluations = std.ArrayList(EvaluateResult).init(std.heap.page_allocator);
     scan_loop: while (i < string.len) {
-        // stripe whitespace
+        // stripe whitespace and newlines
         while (string[i] == ' ' or string[i] == '\n') {
             i += 1;
         }
@@ -632,15 +662,34 @@ fn scan(string: []const u8) !std.ArrayList(EvaluateResult) {
                         bare_string_dfa.col[1] = k;
                         std.debug.print("\nbare_string_dfa accepted: \x1B[32m{s}\x1B[0m", .{bare_string_dfa.value.items});
                         try evaluations.append(evaluate(Lexeme{ .temporary_table = bare_string_dfa }));
-                        token.clearAndFree();
-                        try token.appendSlice(bare_string_dfa.value.items);
+
+                        // stripe whitespace
+                        while (string[i] == ' ') {
+                            i += 1;
+                        }
+
+                        if (try as_dfa.transition(string[i]) == State.START) {
+                            var l = i + 1;
+                            while (try as_dfa.transition(string[l]) == State.ACCEPTING) {
+                                l += 1;
+                            }
+                            i = l + 1;
+                            if (as_dfa.state == State.FAILED) {
+                                return error.StateFailed;
+                            } else {
+                                try evaluations.append(evaluate(.{ .as = as_dfa }));
+                                token.clearAndFree();
+                                try token.appendSlice(as_dfa.value.items);
+                            }
+                        } else {
+                            return error.InvalidToken;
+                        }
                     }
                 }
             }
         }
         // suspect select token as a candidate
         else if (try select_dfa.transition(c) == State.START) {
-            std.debug.print("\nhit select_dfa", .{});
             select_dfa.col[0] = i;
             var j = i + 1;
             while (j + 1 < string.len and try select_dfa.transition(string[j]) == State.ACCEPTING) {
@@ -919,11 +968,18 @@ fn scan(string: []const u8) !std.ArrayList(EvaluateResult) {
             try token.append('(');
             lexeme_tag = LexemeTag.left_parenthesis;
             i += 1;
+        } else if (c == ')') {
+            std.debug.print("\nright_parenthesis accepted: \x1B[32m{c}\x1B[0m", .{')'});
+            try evaluations.append(evaluate(Lexeme{ .right_parenthesis = BareStringDFA{ .col = [2]u32{ i, i } } }));
+            token.clearAndFree();
+            try token.append(')');
+            lexeme_tag = LexemeTag.right_parenthesis;
+            i += 1;
         } else if (c == ' ') {
             std.debug.print("\nLeading whitespace character will be ignored for now.", .{});
             i += 1;
         } else if (c == ';') {
-            std.debug.print("\nEncounter statement terminate character", .{});
+            std.debug.print("\nEncounter statement terminate character: \x1B[32m{c}\x1B[0m", .{';'});
             i += 1;
         } else {
             std.debug.print("\nThis letter '{c}' don't match any defined dfa", .{c});
@@ -956,7 +1012,7 @@ test "A regular evaluated statement in DQL" {
     const result = try tokenize(string);
     std.debug.print("------------ Evaluations as Result below: \n", .{});
     for (result.evaluations.items) |evaluation| {
-        std.debug.print("category: {}, value: {d}, indexes from {} to {}\n", .{ evaluation.category, evaluation.value.len, evaluation.col[0], evaluation.col[1] });
+        std.debug.print("category: {}, len: {d}, indexes from {} to {}\n", .{ evaluation.category, evaluation.value.len, evaluation.col[0], evaluation.col[1] });
     }
 }
 
@@ -979,7 +1035,7 @@ test "full basic example" {
 }
 
 test "with temporaryTable statement" {
-    const string = "with temporaryTable (averageValue) as ( select avg(salary) from employee );";
+    const string = "with temporaryTable as ( select avg(salary) from employee );";
     const result = try tokenize(string);
     try std.testing.expectEqualStrings(string, result.original);
 }

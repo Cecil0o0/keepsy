@@ -80,7 +80,13 @@ pub fn evaluate(lexem: Lexeme) EvaluateResult {
             return EvaluateResult{ .category = LexicalCategory.literal, .value = lexem.temporary_table.value.items, .col = lexem.temporary_table.col };
         },
         LexemeTag.left_parenthesis => {
-            return EvaluateResult{ .category = LexicalCategory.punctuator, .value = "c", .col = lexem.left_parenthesis.col };
+            return EvaluateResult{ .category = LexicalCategory.punctuator, .value = "(", .col = lexem.left_parenthesis.col };
+        },
+        LexemeTag.right_parenthesis => {
+            return EvaluateResult{ .category = LexicalCategory.punctuator, .value = ")", .col = lexem.right_parenthesis.col };
+        },
+        LexemeTag.as => {
+            return EvaluateResult{ .category = LexicalCategory.keyword, .value = "as", .col = lexem.as.col };
         },
     }
 }
