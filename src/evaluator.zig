@@ -34,44 +34,55 @@ pub const EvaluateResult = struct {
 pub fn evaluate(lexem: Lexeme) EvaluateResult {
     switch (lexem) {
         LexemeTag.select => {
-            // TODO At evaluate stage, we should make a copy for avoiding segmentation fault caused by accessing invalid memory address.
-            return EvaluateResult{ .category = LexicalCategory.keyword, .value = lexem.select.value.items, .col = lexem.select.col };
+            var copy = std.ArrayList(u8).init(std.heap.page_allocator);
+            copy.appendSlice(lexem.select.value.items[0..]) catch unreachable;
+            return EvaluateResult{ .category = LexicalCategory.keyword, .value = copy.items, .col = lexem.select.col };
         },
         LexemeTag.from => {
-            return EvaluateResult{ .category = LexicalCategory.keyword, .value = &lexem.from.value, .col = lexem.from.col };
+            return EvaluateResult{ .category = LexicalCategory.keyword, .value = "from", .col = lexem.from.col };
         },
         LexemeTag.star => {
-            return EvaluateResult{ .category = LexicalCategory.identifier, .value = &lexem.star.value, .col = lexem.star.col };
+            return EvaluateResult{ .category = LexicalCategory.keyword, .value = "*", .col = lexem.star.col };
         },
         LexemeTag.double_quote_string => {
             return EvaluateResult{ .category = LexicalCategory.literal, .value = lexem.double_quote_string.value.items, .col = lexem.double_quote_string.col };
         },
         LexemeTag.column => {
-            return EvaluateResult{ .category = LexicalCategory.identifier, .value = lexem.column.value.items, .col = lexem.column.col };
+            var copy = std.ArrayList(u8).init(std.heap.page_allocator);
+            copy.appendSlice(lexem.column.value.items[0..]) catch unreachable;
+            return EvaluateResult{ .category = LexicalCategory.identifier, .value = copy.items, .col = lexem.column.col };
         },
         LexemeTag.table => {
             return EvaluateResult{ .category = LexicalCategory.identifier, .value = lexem.table.value.items, .col = lexem.table.col };
         },
         LexemeTag.order_by => {
-            return EvaluateResult{ .category = LexicalCategory.keyword, .value = lexem.order_by.value[0..], .col = lexem.order_by.col };
+            return EvaluateResult{ .category = LexicalCategory.keyword, .value = "order by", .col = lexem.order_by.col };
         },
         LexemeTag.order_by_item => {
-            return EvaluateResult{ .category = LexicalCategory.identifier, .value = lexem.order_by_item.value.items, .col = lexem.order_by_item.col };
+            var copy = std.ArrayList(u8).init(std.heap.page_allocator);
+            copy.appendSlice(lexem.order_by_item.value.items[0..]) catch unreachable;
+            return EvaluateResult{ .category = LexicalCategory.identifier, .value = copy.items, .col = lexem.order_by_item.col };
         },
         LexemeTag.order_by_dir => {
-            return EvaluateResult{ .category = LexicalCategory.keyword, .value = lexem.order_by_dir.value[0..], .col = lexem.order_by_dir.col };
+            var copy = std.ArrayList(u8).init(std.heap.page_allocator);
+            copy.appendSlice(lexem.order_by_dir.value[0..]) catch unreachable;
+            return EvaluateResult{ .category = LexicalCategory.keyword, .value = copy.items, .col = lexem.order_by_dir.col };
         },
         LexemeTag.limit => {
-            return EvaluateResult{ .category = LexicalCategory.keyword, .value = lexem.limit.value.items, .col = lexem.limit.col };
+            return EvaluateResult{ .category = LexicalCategory.keyword, .value = "limit", .col = lexem.limit.col };
         },
         LexemeTag.limit_number => {
-            return EvaluateResult{ .category = LexicalCategory.literal, .value = lexem.limit_number.value.items, .col = lexem.limit_number.col };
+            var copy = std.ArrayList(u8).init(std.heap.page_allocator);
+            copy.appendSlice(lexem.limit_number.value.items[0..]) catch unreachable;
+            return EvaluateResult{ .category = LexicalCategory.literal, .value = copy.items, .col = lexem.limit_number.col };
         },
         LexemeTag.where => {
-            return EvaluateResult{ .category = LexicalCategory.keyword, .value = lexem.where.value.items, .col = lexem.where.col };
+            return EvaluateResult{ .category = LexicalCategory.keyword, .value = "where", .col = lexem.where.col };
         },
         LexemeTag.where_condition => {
-            return EvaluateResult{ .category = LexicalCategory.literal, .value = lexem.where_condition.value.items, .col = lexem.where_condition.col };
+            var copy = std.ArrayList(u8).init(std.heap.page_allocator);
+            copy.appendSlice(lexem.where_condition.value.items[0..]) catch unreachable;
+            return EvaluateResult{ .category = LexicalCategory.literal, .value = copy.items, .col = lexem.where_condition.col };
         },
         LexemeTag.with => {
             return EvaluateResult{ .category = LexicalCategory.keyword, .value = lexem.with.value.items, .col = lexem.with.col };
