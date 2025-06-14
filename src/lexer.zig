@@ -2,3 +2,9 @@
 //! It is NOT aware of syntax-level information and is only responsible for lexical tokenization.
 //! If you want to know more about lexical analysis, please refer to the following link:
 //! https://en.wikipedia.org/wiki/Lexical_analysis
+
+const tokenizer = @import("tokenizer.zig");
+
+pub fn lex(source: []const u8) !tokenizer.TokenizeResult {
+    return tokenizer.tokenize(source);
+}

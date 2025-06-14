@@ -709,7 +709,7 @@ fn scan(string: []const u8) !std.ArrayList(EvaluateResult) {
                 try token.appendSlice("select");
             }
         }
-        // look backward for `select` to indicate `regular column` identifier
+        // look backward one token for `select` to indicate `regular column` identifier
         else if (std.mem.eql(u8, token.items, "select")) {
             // could be extended to `function-call column`.
             if (star_dfa.transition(string[i]) == State.START) {
@@ -758,7 +758,7 @@ fn scan(string: []const u8) !std.ArrayList(EvaluateResult) {
                 }
             }
         }
-        // look backward for `from` to indicate `table` identifier
+        // look backward one token for `from` to indicate `table` identifier
         else if (std.mem.eql(u8, token.items, "from") and try table_dfa.transition(string[i]) == State.START) {
             table_dfa.col[0] = i;
             var k = i + 1;
@@ -784,7 +784,7 @@ fn scan(string: []const u8) !std.ArrayList(EvaluateResult) {
             i = k + 1;
             if (i == string.len) break :scan_loop;
         }
-        // `from` segment
+        // `from` token
         else if (from_dfa.transition(string[i]) == State.START) {
             from_dfa.col[0] = i;
             var k = i + 1;
@@ -806,7 +806,7 @@ fn scan(string: []const u8) !std.ArrayList(EvaluateResult) {
             i = k + 1;
             if (i == string.len) break :scan_loop;
         }
-        // looking backward for `where` to indicate `where_condition` segment
+        // looking backward one token for `where` to indicate `where_condition` token
         else if (std.mem.eql(u8, token.items, "where") and try where_condition_dfa.transition(string[i]) == State.START) {
             var condition_k = i + 1;
             where_condition_dfa.col[0] = i;
@@ -826,7 +826,7 @@ fn scan(string: []const u8) !std.ArrayList(EvaluateResult) {
             i = condition_k + 1;
             if (i == string.len) break :scan_loop;
         }
-        // `where` segment
+        // `where` token
         else if (try where_dfa.transition(c) == State.START) {
             var k = i + 1;
             where_dfa.col[0] = i;
@@ -848,7 +848,7 @@ fn scan(string: []const u8) !std.ArrayList(EvaluateResult) {
             }
             i = k + 1;
         }
-        // looking backward for `LexemeTag.order_by_item` to indicate `order_by_dir`
+        // looking backward one token for `LexemeTag.order_by_item` to indicate `order_by_dir`
         else if (lexeme_tag == LexemeTag.order_by_item and order_by_dir_dfa.transition(c) == State.START) {
             var k = i + 1;
             order_by_dir_dfa.col[0] = i;
@@ -870,7 +870,7 @@ fn scan(string: []const u8) !std.ArrayList(EvaluateResult) {
             i = k + 1;
             if (i == string.len) break :scan_loop;
         }
-        // looking backward for `order by` to indicate `order_by_item` segment
+        // looking backward one token for `order by` to indicate `order_by_item` token
         else if (std.mem.eql(u8, token.items, "order by") and try order_by_item_dfa.transition(string[i]) == State.START) {
             var k = i + 1;
             order_by_item_dfa.col[0] = i;
@@ -893,7 +893,7 @@ fn scan(string: []const u8) !std.ArrayList(EvaluateResult) {
             i = k + 1;
             if (i == string.len) break :scan_loop;
         }
-        // `order by` segment
+        // `order by` token
         else if (order_by_dfa.transition(c) == State.START) {
             var k = i + 1;
             order_by_dfa.col[0] = i;
@@ -913,7 +913,7 @@ fn scan(string: []const u8) !std.ArrayList(EvaluateResult) {
             i = k + 1;
             if (i == string.len) break :scan_loop;
         }
-        // looking backward for `limit` to indicate `limit_number` segment
+        // looking backward one token for `limit` to indicate `limit_number` token
         else if (std.mem.eql(u8, token.items, "limit") and try number_dfa.transition(c) == State.START) {
             var k = i + 1;
             number_dfa.col[0] = i;
@@ -935,7 +935,7 @@ fn scan(string: []const u8) !std.ArrayList(EvaluateResult) {
             i = k + 1;
             if (i == string.len) break :scan_loop;
         }
-        // `limit` segment
+        // `limit` token
         else if (try limit_dfa.transition(c) == State.START) {
             var k = i + 1;
             limit_dfa.col[0] = i;
@@ -957,7 +957,7 @@ fn scan(string: []const u8) !std.ArrayList(EvaluateResult) {
             i = k + 1;
             if (i == string.len) break :scan_loop;
         }
-        // `double_quote_string_literal` segment
+        // `double_quote_string_literal` token
         else if (try double_quote_dfa.transition(c) == State.START) {
             std.debug.print("\nhit double_quote_dfa", .{});
             double_quote_dfa.col[0] = i;
@@ -966,10 +966,8 @@ fn scan(string: []const u8) !std.ArrayList(EvaluateResult) {
                 j += 1;
             }
             i = j + 1;
-            // Generally, if dfa went something wrong such as State.FAILED
             if (double_quote_dfa.state == State.FAILED) {
-                stderr.print("\ndouble_quote_dfa failed with: {s}\n", .{double_quote_dfa.value.items});
-                return TokenizeError.DFAStateFailed;
+                unreachable;
             } else {
                 double_quote_dfa.col[1] = j;
                 std.debug.print("\ndouble_quote_dfa accepted: \x1B[32m{s}\x1B[0m", .{double_quote_dfa.value.items});

@@ -1,13 +1,6 @@
 const std = @import("std");
 const LexemeTag = @import("./tokenizer.zig").LexemeTag;
 const Lexeme = @import("./tokenizer.zig").Lexeme;
-const SelectDFA = @import("./tokenizer.zig").SelectDFA;
-const FromDFA = @import("./tokenizer.zig").FromDFA;
-const ColumnDFA = @import("./tokenizer.zig").ColumnDFA;
-const TableDFA = @import("./tokenizer.zig").TableDFA;
-const OrderByDFA = @import("./tokenizer.zig").OrderByDFA;
-const OrderByItemDFA = @import("./tokenizer.zig").OrderByItemDFA;
-const OrderByDirectionDFA = @import("./tokenizer.zig").OrderByDirectionDFA;
 const LexicalCategory = enum {
     // Names assigned by the programmer
     identifier,
@@ -34,9 +27,7 @@ pub const EvaluateResult = struct {
 pub fn evaluate(lexem: Lexeme) EvaluateResult {
     switch (lexem) {
         LexemeTag.select => {
-            var copy = std.ArrayList(u8).init(std.heap.page_allocator);
-            copy.appendSlice(lexem.select.value.items[0..]) catch unreachable;
-            return EvaluateResult{ .category = LexicalCategory.keyword, .value = copy.items, .col = lexem.select.col };
+            return EvaluateResult{ .category = LexicalCategory.keyword, .value = "select", .col = lexem.select.col };
         },
         LexemeTag.from => {
             return EvaluateResult{ .category = LexicalCategory.keyword, .value = "from", .col = lexem.from.col };
