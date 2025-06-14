@@ -23,7 +23,7 @@ The basic concepts include loop block for every character and Finite-State-Machi
 
 Evaluation is a short but necessary post-scan stage to evaluating a scanned lexeme to be a lexical token which is known by parser, evaluated category of token falls into a common set with several elements including identifier, keyword, punctuator, literal, comment, whitespace.
 
-A issue is what if encounter a case that a DFA try fails, is it a necessary control flow for transfering to another DFA, and if yes what's next proper candidate, or else just return an error with friendly message? For performance perspective, returning error is the better choice because less resource of hardware would be used while may lose a change for a potential chance
+A issue is what if encounter a case that a DFA try fails, is it a necessary control flow for transfering to another DFA, and if yes what's next proper candidate, or else just return an error with friendly message? For performance perspective, returning error is the better choice because less resource of hardware would be used while may lose a change for a potential candidate. To enumerate all cases is a choice for both performance and function.
 
 ## Unresolved Questions
 
