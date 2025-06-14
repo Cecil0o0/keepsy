@@ -16,10 +16,12 @@ There could be some alternatives in library or executable file format for speedi
 
 We breakdown the lexical analysis into three parts:
 - A `tokenizer` module is responsible for lexical tokenization, which exports a functionality to process a string to scan in one pass and then give back an evaluations of tokens based on the `evaluator` module.
-- A `evaluator` module is doing evaluating in the post-scan stage, which exports a functionality for recognizing and categorizing the lexemes into tokens that consists of a specific type name and an optional value.
+- A `evaluator` module is doing evaluating in the post-scan stage, which exports a functionality for recognizing and categorizing the lexemes into tokens that consists of a required category name and an optional value.
 - A `lexer` module as facade module is a combination of the `tokenizer` and `evaluator` modules, which exports a functionality for lexical analysis, and then re-export a `lex` function.
 
-## Unresolved Questions and Bikeshedding
+The basic concepts include loop block for every character and Finite-State-Machine struct for every lexeme. For more simplicity, I choose the Determine-Finite-Automata to implement finite char-based state transition rather than Non-Determine-Finite-Automata. First of the scan function, I will initialize all the DFA structs to stand by.
+
+## Unresolved Questions
 
 Unresolved Questions:
 - Is it necessary to lex all SQL syntax for a data storage software? It is a very large amount of work.
