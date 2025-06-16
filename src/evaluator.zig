@@ -44,7 +44,9 @@ pub fn evaluate(lexem: Lexeme) EvaluateResult {
             return EvaluateResult{ .category = LexicalCategory.identifier, .value = copy.items, .col = lexem.column.col };
         },
         LexemeTag.table => {
-            return EvaluateResult{ .category = LexicalCategory.identifier, .value = lexem.table.value.items, .col = lexem.table.col };
+            var copy = std.ArrayList(u8).init(std.heap.page_allocator);
+            copy.appendSlice(lexem.table.value.items[0..]) catch unreachable;
+            return EvaluateResult{ .category = LexicalCategory.identifier, .value = copy.items, .col = lexem.table.col };
         },
         LexemeTag.order_by => {
             return EvaluateResult{ .category = LexicalCategory.keyword, .value = "order by", .col = lexem.order_by.col };

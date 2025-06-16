@@ -220,7 +220,7 @@ pub const ColumnDFA = struct {
                 try self.value.append(c);
             },
             State.START => {
-                if (c == ',' or c == ' ') {
+                if (c == ' ') {} else if (c == ',') {
                     self.state = State.NULL;
                 } else {
                     self.state = State.ACCEPTING;
@@ -228,7 +228,7 @@ pub const ColumnDFA = struct {
                 }
             },
             State.ACCEPTING => {
-                if (c == ',' or c == ' ' or c == '\n') {
+                if (c == ' ') {} else if (c == ',' or c == '\n' or c == ')') {
                     self.state = State.NULL;
                 } else {
                     try self.value.append(c);
@@ -256,7 +256,7 @@ pub const TableDFA = struct {
                 try self.value.append(c);
             },
             State.ACCEPTING => {
-                if (c == ' ' or c == ';' or c == '\n') {
+                if (c == ' ') {} else if (c == ';' or c == '\n' or c == ')') {
                     self.state = State.NULL;
                 } else {
                     try self.value.append(c);
@@ -627,10 +627,8 @@ fn scan(string: []const u8) !std.ArrayList(EvaluateResult) {
     var i: u32 = 0;
     var evaluations = std.ArrayList(EvaluateResult).init(std.heap.page_allocator);
     scan_loop: while (i < string.len) {
-        // stripe whitespace and newlines
-        while (string[i] == ' ' or string[i] == '\n') {
-            i += 1;
-        }
+        // strip whitespace and newlines
+        while (string[i] == ' ' or string[i] == '\n') i += 1;
 
         const c = string[i];
         if (token.items.len == 0 and try with_dfa.transition(c) == State.START) {
@@ -650,23 +648,44 @@ fn scan(string: []const u8) !std.ArrayList(EvaluateResult) {
                 try evaluations.append(evaluate(Lexeme{ .with = with_dfa }));
                 if (try bare_string_dfa.transition(string[with_dfa.col[1] + 1]) == State.START) {
                     var k = with_dfa.col[1] + 2;
-                    while (k + 1 < string.len and try bare_string_dfa.transition(string[k]) == State.ACCEPTING) {
-                        k += 1;
-                    }
+                    while (k + 1 < string.len and try bare_string_dfa.transition(string[k]) == State.ACCEPTING) k += 1;
                     // move i pointer
-                    i = k + 1;
                     if (bare_string_dfa.state == State.FAILED) {
                         stderr.print("\nUnexpected token: {s}\n", .{bare_string_dfa.value.items});
                         return TokenizeError.DFAStateFailed;
                     } else {
+                        i = k + 1;
                         bare_string_dfa.col[1] = k;
                         std.debug.print("\nbare_string_dfa accepted: \x1B[32m{s}\x1B[0m", .{bare_string_dfa.value.items});
                         try evaluations.append(evaluate(Lexeme{ .temporary_table = bare_string_dfa }));
 
-                        // stripe whitespace
-                        while (string[i] == ' ') {
-                            i += 1;
+                        // strip whitespace
+                        while (string[i] == ' ') i += 1;
+
+                        if (string[i] == '(') {
+                            var m = i + 1;
+                            while (string[m] != ')') {
+                                while (string[m] == ' ') m += 1;
+                                if (try column_dfa.transition(string[m]) == State.START) {
+                                    column_dfa.col[0] = m;
+                                    m += 1;
+                                    while (try column_dfa.transition(string[m]) == State.ACCEPTING) m += 1;
+                                    if (column_dfa.state == State.FAILED) return TokenizeError.DFAStateFailed;
+                                    column_dfa.col[1] = m;
+                                    std.debug.print("\ncolumn_dfa accepted: \x1B[32m{s}\x1B[0m", .{column_dfa.value.items});
+                                    try evaluations.append(evaluate(.{ .column = column_dfa }));
+                                    column_dfa.value.clearAndFree();
+                                }
+                                if (string[m] == ',') {
+                                    m += 1;
+                                    continue;
+                                }
+                            }
+                            i = m + 1;
                         }
+
+                        // strip whitespace
+                        while (string[i] == ' ') i += 1;
 
                         if (try as_dfa.transition(string[i]) == State.START) {
                             var l = i + 1;
@@ -750,7 +769,7 @@ fn scan(string: []const u8) !std.ArrayList(EvaluateResult) {
                         // move i pointer
                         i = k + 1;
                         if (i == string.len) break :scan_loop;
-                        // stripe whitespace
+                        // strip whitespace
                         while (string[i] == ' ' or string[i] == '\n') {
                             i += 1;
                         }
@@ -762,13 +781,7 @@ fn scan(string: []const u8) !std.ArrayList(EvaluateResult) {
         else if (std.mem.eql(u8, token.items, "from") and try table_dfa.transition(string[i]) == State.START) {
             table_dfa.col[0] = i;
             var k = i + 1;
-            while (try table_dfa.transition(string[k]) == State.ACCEPTING) {
-                if (k + 1 == string.len) {
-                    break;
-                } else {
-                    k += 1;
-                }
-            }
+            while (try table_dfa.transition(string[k]) == State.ACCEPTING) k += 1;
             // Generally, if dfa went something wrong such as State.FAILED
             if (table_dfa.state == State.FAILED) {
                 stderr.print("\ntable_dfa failed with: {s}\n", .{table_dfa.value.items});
@@ -777,11 +790,12 @@ fn scan(string: []const u8) !std.ArrayList(EvaluateResult) {
                 table_dfa.col[1] = k;
                 std.debug.print("\ntable_dfa  accepted: \x1B[32m{s}\x1B[0m", .{table_dfa.value.items});
                 try evaluations.append(evaluate(Lexeme{ .table = table_dfa }));
+                table_dfa.value.clearAndFree();
                 token.clearAndFree();
                 try token.appendSlice(table_dfa.value.items);
             }
-            // move `i` cursor
-            i = k + 1;
+            // move `i` pointer
+            i = k;
             if (i == string.len) break :scan_loop;
         }
         // `from` token
@@ -836,38 +850,34 @@ fn scan(string: []const u8) !std.ArrayList(EvaluateResult) {
             if (where_dfa.state == State.FAILED) {
                 stderr.print("\nwhere_dfa failed with: {s}\n", .{where_dfa.value.items});
                 return TokenizeError.DFAStateFailed;
-            } else {
-                where_dfa.col[1] = k;
-                std.debug.print("\nwhere_dfa accepted: \x1B[32m{s}\x1B[0m", .{where_dfa.value.items});
-                try evaluations.append(evaluate(Lexeme{ .where = where_dfa }));
-
-                token.clearAndFree();
-                try token.appendSlice("where");
-
-                where_dfa.value.clearAndFree();
             }
-            i = k + 1;
+            where_dfa.col[1] = k;
+            std.debug.print("\nwhere_dfa accepted: \x1B[32m{s}\x1B[0m", .{where_dfa.value.items});
+            try evaluations.append(evaluate(Lexeme{ .where = where_dfa }));
+
+            token.clearAndFree();
+            try token.appendSlice("where");
+
+            where_dfa.value.clearAndFree();
+            i = k;
         }
         // looking backward one token for `LexemeTag.order_by_item` to indicate `order_by_dir`
         else if (lexeme_tag == LexemeTag.order_by_item and order_by_dir_dfa.transition(c) == State.START) {
             var k = i + 1;
             order_by_dir_dfa.col[0] = i;
-            while (order_by_dir_dfa.transition(string[k]) == State.ACCEPTING) {
-                k += 1;
-            }
+            while (order_by_dir_dfa.transition(string[k]) == State.ACCEPTING) k += 1;
             if (order_by_dir_dfa.state == State.FAILED) {
                 stderr.print("\norder_by_dir_dfa failed with: {s}\n", .{order_by_dir_dfa.value});
                 return TokenizeError.DFAStateFailed;
-            } else {
-                order_by_dir_dfa.col[1] = k;
-                std.debug.print("\norder_by_dir_dfa accepted: \x1B[32m{s}\x1B[0m", .{order_by_dir_dfa.value});
-                try evaluations.append(evaluate(Lexeme{ .order_by_dir = order_by_dir_dfa }));
-                token.clearAndFree();
-                try token.appendSlice(order_by_dir_dfa.value[0..]);
-                lexeme_tag = LexemeTag.order_by_dir;
             }
+            order_by_dir_dfa.col[1] = k;
+            std.debug.print("\norder_by_dir_dfa accepted: \x1B[32m{s}\x1B[0m", .{order_by_dir_dfa.value});
+            try evaluations.append(evaluate(Lexeme{ .order_by_dir = order_by_dir_dfa }));
+            token.clearAndFree();
+            try token.appendSlice(order_by_dir_dfa.value[0..]);
+            lexeme_tag = LexemeTag.order_by_dir;
             // move i pointer here because nested DFA is done
-            i = k + 1;
+            i = k;
             if (i == string.len) break :scan_loop;
         }
         // looking backward one token for `order by` to indicate `order_by_item` token
@@ -1014,7 +1024,7 @@ test "A correct keyword/identifier in DQL" {
 }
 
 test "A regular statement in DQL" {
-    const string = "select * from user";
+    const string = "select * from user;";
     const result = try tokenize(string);
     try std.testing.expectEqualStrings(string, result.original);
 }
@@ -1029,12 +1039,12 @@ test "A regular evaluated statement in DQL" {
 }
 
 test "Two statements in DQL" {
-    const string = "select * from \"user\"; select * from \"item\"";
+    const string = "select * from \"user\"; select * from \"item\";";
     const result = try tokenize(string);
     try std.testing.expectEqualStrings(string, result.original);
 }
 
-test "full basic example" {
+test "select-stmt" {
     const string =
         \\ select first_name, last_name, hire_date
         \\ from employees
@@ -1050,7 +1060,7 @@ test "full basic example" {
     }
 }
 
-test "with temporaryTable statement" {
+test "with-clause" {
     const string = "with temporaryTable as ( select avg(salary) from employee );";
     const result = try tokenize(string);
     try std.testing.expectEqualStrings(string, result.original);
@@ -1059,3 +1069,10 @@ test "with temporaryTable statement" {
         std.debug.print("category: {}, value: {s}, len: {d}, indexed from {} to {} \n", .{ evaluation.category, evaluation.value, evaluation.value.len, evaluation.col[0], evaluation.col[1] });
     }
 }
+
+test "common-table-expression" {
+    const string = "with tableName (column1, column2) as (select * from tableName1);";
+    _ = try tokenize(string);
+}
+
+test "window-defn" {}
