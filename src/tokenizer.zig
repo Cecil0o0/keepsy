@@ -5,7 +5,7 @@ const std = @import("std");
 const evaluate = @import("./evaluator.zig").evaluate;
 const EvaluateResult = @import("./evaluator.zig").EvaluateResult;
 
-// Use deterministic finite automata for simply implementing a lexer.
+/// Use deterministic finite automata for simply implementing a lexer.
 const State = enum {
     // for initial state and the complete state
     NULL,

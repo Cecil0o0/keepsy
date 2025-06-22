@@ -1,5 +1,7 @@
-const tokenizer = @import("./tokenizer.zig");
 const std = @import("std");
+pub const evaluator = @import("./evaluator.zig");
+pub const tokenizer = @import("./tokenizer.zig");
+pub const data = @import("./base.zig");
 
 pub fn main() !void {
     var iter = try std.process.argsWithAllocator(std.heap.page_allocator);

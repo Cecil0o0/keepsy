@@ -2,3 +2,6 @@
 zig-out/
 out/
 node_modules/
+docs/
+*.a
+*.a.o
