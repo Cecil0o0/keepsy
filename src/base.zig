@@ -32,3 +32,55 @@ pub const Datum = struct {
     /// every datum should hold a value for human's or computer's reading
     value: []const u8,
 };
+
+pub const BigData = struct {
+    /// Big data primarily refers to data sets that are too large or complex to be dealt with by traditional data-processing software.
+    description: []const u8,
+    /// Many challenges if you want to analyze big data
+    challenges_of_big_data_analysis: enum {
+        /// first of all, to collect the data
+        capturing,
+        /// store the data for continuous analysis and retrieve
+        storage,
+        /// to extract the value from the data, value is one of the "five Vs"
+        analysis,
+        /// how to search the data in a big data system may be a general challenge for every one in whole life
+        /// equals "What you do"
+        search,
+        /// to share the data with other people for amplifying the value of data.
+        sharing,
+        /// transfer the data between different systems, a way to make data together or just divide data into different parts
+        transfer,
+        /// to visualize the data in a way that is easy to understand
+        visualization,
+        /// information retrieval for information need with a specific structured request.
+        /// equals "How you ask"
+        querying,
+        /// timeliness of the data
+        updating,
+        /// the ability of an big data system to seclude the information
+        information_privacy,
+        /// the data come from, differs to the term 'datasource'.
+        data_source,
+    },
+    /// Current the term big data tends to refer to the use of followings
+    trending_usage: enum {
+        predicative_analytics,
+        user_behavior_analytics,
+        other_advanced_analytics,
+    },
+    /// As time goes by, the size and number of available data sets have grown rapidly as data is collected by devices.
+    growable: bool,
+    /// The data is collected by the following devices.
+    collected_by_devices: enum {
+        mobile,
+        iot,
+        aerial_equipment,
+        software_log,
+        camera,
+        microphone,
+        rfid_reader,
+        wireless_sensor_network,
+        other,
+    },
+};
