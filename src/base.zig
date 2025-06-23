@@ -10,7 +10,7 @@ pub const Data = struct {
         /// A simply sequences of symbols that could be further interpreted formally.
         sequence_of_symbols: "sequence_of_symbols",
     },
-    collected_by: union {
+    collected_by_method: union {
         /// Measurement is the quantification of attributes of an object or event, which can be used to compare with other objects or events.
         measurement: "measurement",
         /// in the natural sciences, observation is an act or insance of noticing or perceving and the acquisition of information from a primary source.
@@ -23,6 +23,8 @@ pub const Data = struct {
         /// Knowledge representation (KR) aims to model informatin in a structured manner to formally represent it as knowledge in knowledge-based systems whereas knowledge representation and reasoning also aims to understand, reason, and interpret knowledge.
         represented: "represented",
     },
+    /// store data as a file for safe access, the data are in the storage medium.
+    representation: import("std").fs.file,
 };
 
 /// Datum comprises a value and a category
