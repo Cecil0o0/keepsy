@@ -33,6 +33,12 @@ pub const Data = struct {
         im_message: []const u8,
         /// An ammail received by an email client 
         email: []const u8
+    },
+    /// formally organize data
+    organized_into: enum {
+        structure,
+        unstructure,
+        semi_structure
     }
 };
 
