@@ -24,22 +24,18 @@ pub const Data = struct {
         represented: "represented",
     },
     /// store data as a file for safe access, the data are in the storage medium.
-    representation: enum {
+    representation: union {
         /// A file handler for implementation
-        file: import("std").fs.file,
+        file: @import("std").fs.file,
         /// A URL to access
         web: []const u8,
         /// A message on IM
         im_message: []const u8,
-        /// An ammail received by an email client 
-        email: []const u8
+        /// An ammail received by an email client
+        email: []const u8,
     },
     /// formally organize data
-    organized_into: enum {
-        structure,
-        unstructure,
-        semi_structure
-    }
+    organized_into: enum { structure, unstructure, semi_structure },
 };
 
 /// Datum comprises a value and a category
@@ -99,5 +95,27 @@ pub const BigData = struct {
         rfid_reader,
         wireless_sensor_network,
         other,
+    },
+};
+
+pub const DataStorage = struct {
+    description: []const u8 = "Data storage is the recording (storing) of information (data) in a storage medium.",
+    medium_type: enum {
+        /// A digital, machine-readable storage medium
+        digital_and_machine_readable,
+        /// A non-digital storage medium
+        non_digital,
+    },
+    /// A category of storage medium
+    non_digital_storage_media: enum {
+        /// by hand
+        handwriting_or_print,
+        phonographic_recording_or_film,
+        magnetic_tape_or_magnetic,
+        optical_discs_or_optical,
+        /// Ribonucleic acid
+        rna,
+        /// Deoxyribonucleic acid
+        dna,
     },
 };
