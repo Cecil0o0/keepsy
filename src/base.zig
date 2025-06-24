@@ -24,7 +24,16 @@ pub const Data = struct {
         represented: "represented",
     },
     /// store data as a file for safe access, the data are in the storage medium.
-    representation: import("std").fs.file,
+    representation: enum {
+        /// A file handler for implementation
+        file: import("std").fs.file,
+        /// A URL to access
+        web: []const u8,
+        /// A message on IM
+        im_message: []const u8,
+        /// An ammail received by an email client 
+        email: []const u8
+    }
 };
 
 /// Datum comprises a value and a category
