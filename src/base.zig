@@ -49,7 +49,7 @@ pub const Datum = struct {
 };
 
 /// data set is the collection of data
-const data_set = struct {
+const DataSet = struct {
    collection: []const Data,
 };
 
