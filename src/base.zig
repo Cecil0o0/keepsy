@@ -48,6 +48,11 @@ pub const Datum = struct {
     value: []const u8,
 };
 
+/// data set is the collection of data
+const data_set = struct {
+   collection: []const Data,
+};
+
 pub const BigData = struct {
     /// Big data primarily refers to data sets that are too large or complex to be dealt with by traditional data-processing software.
     description: []const u8,
