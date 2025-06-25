@@ -1,3 +1,5 @@
+/// A collection of models which are formed with information from WikiPedia website, which is the free encyclopedia that anyone can edit.
+
 pub const Data = struct {
     /// A data could be treated as a collection of datum
     collection: []const Datum,
