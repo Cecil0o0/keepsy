@@ -49,8 +49,27 @@ pub const Datum = struct {
 };
 
 /// data set is the collection of data
-const DataSet = struct {
-   collection: []const Data,
+const Dataset = struct {
+    description: []const u8 = "a collection of data, table or document or file",
+    collection: []const Data,
+    correspond_with: union {
+        database_tables,
+        documents,
+        files
+    }
+};
+
+/// database is responsible for capturing data
+const Database = struct {
+    description: []const u8 = "an organized collection of data based on a DBMS",
+    /// whether organized or not
+    organized: bool,
+    /// to capture and analyze the data
+    interact_with: enum {
+        end_user,
+        application,
+        itself
+    },
 };
 
 pub const BigData = struct {
