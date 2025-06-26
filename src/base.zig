@@ -1,5 +1,4 @@
 /// A collection of models which are formed with information from WikiPedia website, which is the free encyclopedia that anyone can edit.
-
 pub const Data = struct {
     /// A data could be treated as a collection of datum
     collection: []const Datum,
@@ -48,27 +47,31 @@ pub const Datum = struct {
     value: []const u8,
 };
 
-/// data set is the collection of data
-const Dataset = struct {
+pub const Dataset = struct {
     description: []const u8 = "a collection of data, table or document or file",
+    /// data set is the collection of data
     collection: []const Data,
+    /// A Dataset would correspond with some actual digital object
     correspond_with: union {
-        database_tables,
-        documents,
-        files
-    }
+        database_tables: []const u8,
+        documents: []const u8,
+        files: []const u8,
+    },
 };
 
-/// database is responsible for capturing data
-const Database = struct {
-    description: []const u8 = "an organized collection of data based on a DBMS",
+pub const Database = struct {
+    description: []const u8 = "an organized collection of data based on a DBMS, mainly used for capturing data.",
     /// whether organized or not
     organized: bool,
     /// to capture and analyze the data
     interact_with: enum {
+        /// through a user interface, such as web browser, desktop application, mobile application.
         end_user,
+        /// with an application interface through a network transfer on a distributed system
+        /// or inter-process communication on a local operating system
         application,
-        itself
+        /// with database itself
+        itself,
     },
 };
 
