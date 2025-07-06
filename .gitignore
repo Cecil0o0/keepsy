@@ -1,7 +1,20 @@
-.zig-cache/
-zig-out/
+# for node.js
 out/
 node_modules/
 docs/
+
+# for zig or c programming language
+# zig build
+.zig-cache/
+zig-out/
+# zig cc
 *.a
 *.a.o
+
+# for sqlite3 software
+*.db
+
+# for go programming language
+# std net/http/pprof
+profile*.pdf
+trace.out
