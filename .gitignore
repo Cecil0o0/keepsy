@@ -18,3 +18,5 @@ zig-out/
 # std net/http/pprof
 profile*.pdf
 trace.out
+
+.DS_Store
