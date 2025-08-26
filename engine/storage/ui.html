@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <title>UI of the engine</title>
+</head>
+
+<body>
+    <label>输入一条或多条查询语句，以英文分号分隔</label>
+    <textarea style="display: block; width: 300px; height: 100px;"></textarea>
+    <button>执行</button>
+    <div id="execution-output" style="white-space: pre;"></div>
+    <script type="module">
+        document.querySelector('textarea').value = localStorage.getItem('statements');
+        document.querySelector('textarea').addEventListener('keyup', () => {
+            localStorage.setItem('statements', document.querySelector('textarea').value);
+        });
+        document.querySelector('button').addEventListener('click', async () => {
+            const sql = document.querySelector('textarea').value;
+            const response = await fetch('/execute', {
+                method: 'POST',
+                body: sql
+            }).then(res => res.text());
+            document.getElementById('execution-output').innerHTML = '';
+            document.getElementById('execution-output').innerHTML = response;
+        })
+    </script>
+</body>
+
+</html>
