@@ -52,6 +52,13 @@ fn handle_connection(allocator: std.mem.Allocator, conn: std.net.Server.Connecti
             .name = "Content-Type",
             .value = "text/html",
         }} });
+    } else if (std.mem.eql(u8, path, "/favicon.svg")) {
+        var svg_buffer: [10240]u8 = undefined;
+        const svg_content = try std.fs.cwd().readFile("favicon.svg", &svg_buffer);
+        try req.respond(svg_content, .{ .status = .ok, .extra_headers = &.{.{
+            .name = "Content-Type",
+            .value = "image/svg+xml",
+        }} });
     } else if (std.mem.eql(u8, path, "/interpret")) {
         var reader = try req.reader();
         const body = try reader.readAllAlloc(allocator, 1024);
