@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+  <title>Your Data</title>
+</head>
+
+<body>
+  先<button id="explore">探索你的数据</button>
+  <div id="explore-output">
+    <label style="display: block">探索结果</label>
+    <span>你的数据表：</span>
+    <div style="display: inline-block; white-space: pre"></div>
+  </div>
+  <label>然后使用结构化查询语言定义、操作、查询你的个人数据</label>
+  <textarea style="display: block; width: 100%; height: 200px"></textarea>
+  <button id="interpret">解释语句</button>
+
+  <div id="interpret-output">
+    <label>解释结果</label>
+    <div style="white-space: pre"></div>
+  </div>
+  <script type="module">
+    document.body.addEventListener("keydown", async (e) => {
+      if (e.key === "Enter" && e.metaKey) {
+        document
+          .querySelector("#interpret")
+          .dispatchEvent(new Event("click"));
+      }
+    });
+    document.querySelector("textarea").value =
+      localStorage.getItem("statements");
+    document.querySelector("textarea").addEventListener("keyup", () => {
+      localStorage.setItem(
+        "statements",
+        document.querySelector("textarea").value
+      );
+    });
+    document.querySelector("#explore").addEventListener("click", async () => {
+      const sql = document.querySelector("textarea").value;
+      const response = await fetch("/explore").then((res) => res.text());
+      document.querySelector("#explore-output>div").innerHTML = "";
+      document.querySelector("#explore-output>div").innerHTML = response;
+    });
+    document
+      .querySelector("#interpret")
+      .addEventListener("click", async () => {
+        const sql = document.querySelector("textarea").value;
+        const response = await fetch("/interpret", {
+          method: "POST",
+          body: sql,
+        }).then((res) => res.text());
+        document.querySelector("#interpret-output>div").innerHTML = "";
+        document.querySelector("#interpret-output>div").innerHTML = response;
+      });
+  </script>
+</body>
+
+</html>
