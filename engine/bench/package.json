@@ -1,0 +1,8 @@
+{
+  "scripts": {
+    "bench:insert:local": "wrk -t300 -c300 -d10s -s insert.lua http://localhost:8000/interpret",
+    "bench:count:local": "wrk -t300 -c300 -d10s -s count.lua http://localhost:8000/interpret",
+    "bench:insert": "wrk -t300 -c300 -d10s -s insert.lua https://pre-datadev.alibaba-inc.com/interpret",
+    "bench:count": "wrk -t300 -c300 -d10s -s count.lua https://pre-datadev.alibaba-inc.com/interpret"
+  }
+}

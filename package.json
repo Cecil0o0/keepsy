@@ -1,0 +1,15 @@
+{
+    "scripts": {
+        "web:dev": "bun ui/serve.ts --watch",
+        "test": "bun run build && bun test",
+        "build:wasm": "zig build-exe src/wasm.zig -target wasm32-freestanding -fno-entry --export=add --export=tokenize && rm wasm.wasm.o && mv wasm.wasm zig-out/bin/keepsy.wasm",
+        "build:executable": "zig build",
+        "build": "bun run build:executable && bun run build:wasm",
+        "build:docs": "zig build-lib -femit-docs src/main.zig && bunx serve docs",
+        "sqlite3": "./third_party/sqlite-tools-osx-x64-3500100/sqlite3"
+    },
+    "dependencies": {
+        "bun-types": "1.2.13",
+        "@types/node": "22.15.17"
+    }
+}

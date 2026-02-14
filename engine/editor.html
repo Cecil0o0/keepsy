@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<!-- saved from url=(0040)https://bgsuw971sbg3.space.minimaxi.com/ -->
+<html lang="en" class="dark" style="color-scheme: dark;"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+        <title>sql-editor</title>
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <script type="module" crossorigin="" src="https://bgsuw971sbg3.space.minimaxi.com/assets/index-D7Hp2lUb.js"></script>
+  <link rel="modulepreload" crossorigin="" href="https://bgsuw971sbg3.space.minimaxi.com/assets/sql-js-CfTo6Her.js">
+  <link rel="stylesheet" crossorigin="" href="https://bgsuw971sbg3.space.minimaxi.com/assets/index-CjXxwaUY.css">
+</head>
+
+<body>
+  <div id="root"><script nonce="">((s,u,a,f,m,h,k,w)=>{let E=document.documentElement,C=["light","dark"];function R(b){(Array.isArray(s)?s:[s]).forEach(A=>{let z=A==="class",j=z&&h?m.map(D=>h[D]||D):m;z?(E.classList.remove(...j),E.classList.add(h&&h[b]?h[b]:b)):E.setAttribute(A,b)}),T(b)}function T(b){w&&C.includes(b)&&(E.style.colorScheme=b)}function _(){return window.matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light"}if(f)R(f);else try{let b=localStorage.getItem(u)||a,A=k&&b==="system"?_():b;R(A)}catch{}})("class","theme","system",null,["light","dark"],null,true,true)</script><div class="h-screen flex flex-col bg-gray-50 dark:bg-gray-900"><header class="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-4 py-3"><div class="flex items-center justify-between"><div class="flex items-center space-x-4"><h1 class="text-xl font-bold text-gray-900 dark:text-gray-100">SQL编辑器</h1><div class="flex items-center space-x-2 text-sm text-gray-600 dark:text-gray-400"><div class="w-2 h-2 bg-green-500 rounded-full"></div><span>已连接SQLite</span></div></div><div class="flex items-center space-x-2"><button class="justify-center whitespace-nowrap text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-primary text-primary-foreground hover:bg-primary/90 h-9 rounded-md px-3 flex items-center space-x-1"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-play w-4 h-4"><polygon points="6 3 20 12 6 21 6 3"></polygon></svg><span>执行 (Ctrl+Enter)</span></button><button class="justify-center whitespace-nowrap text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-9 rounded-md px-3 flex items-center space-x-1"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-save w-4 h-4"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg><span>格式化 (Ctrl+F)</span></button><button class="justify-center whitespace-nowrap text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-9 rounded-md px-3 flex items-center space-x-1"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-rotate-ccw w-4 h-4"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path><path d="M3 3v5h5"></path></svg><span>清空</span></button><button class="inline-flex items-center justify-center whitespace-nowrap text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-9 rounded-md px-3"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-sun w-4 h-4"><circle cx="12" cy="12" r="4"></circle><path d="M12 2v2"></path><path d="M12 20v2"></path><path d="m4.93 4.93 1.41 1.41"></path><path d="m17.66 17.66 1.41 1.41"></path><path d="M2 12h2"></path><path d="M20 12h2"></path><path d="m6.34 17.66-1.41 1.41"></path><path d="m19.07 4.93-1.41 1.41"></path></svg></button></div></div></header><div class="flex-1 flex overflow-hidden"><div class="w-80 border-r border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800"><div dir="ltr" data-orientation="horizontal" class="h-full flex flex-col"><div role="tablist" aria-orientation="horizontal" class="h-10 items-center justify-center rounded-md bg-muted p-1 text-muted-foreground grid w-full grid-cols-3 mx-3 mt-3" tabindex="0" data-orientation="horizontal" style="outline: none;"><button type="button" role="tab" aria-selected="true" aria-controls="radix-:r0:-content-editor" data-state="active" id="radix-:r0:-trigger-editor" class="inline-flex items-center justify-center whitespace-nowrap rounded-sm px-3 py-1.5 font-medium ring-offset-background transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm text-xs" tabindex="-1" data-orientation="horizontal" data-radix-collection-item="">编辑器</button><button type="button" role="tab" aria-selected="false" aria-controls="radix-:r0:-content-history" data-state="inactive" id="radix-:r0:-trigger-history" class="inline-flex items-center justify-center whitespace-nowrap rounded-sm px-3 py-1.5 font-medium ring-offset-background transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm text-xs" tabindex="-1" data-orientation="horizontal" data-radix-collection-item="">历史</button><button type="button" role="tab" aria-selected="false" aria-controls="radix-:r0:-content-database" data-state="inactive" id="radix-:r0:-trigger-database" class="inline-flex items-center justify-center whitespace-nowrap rounded-sm px-3 py-1.5 font-medium ring-offset-background transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm text-xs" tabindex="-1" data-orientation="horizontal" data-radix-collection-item="">数据库</button></div><div class="flex-1 overflow-hidden"><div data-state="active" data-orientation="horizontal" role="tabpanel" aria-labelledby="radix-:r0:-trigger-editor" id="radix-:r0:-content-editor" tabindex="0" class="ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 h-full m-0 p-0" style="animation-duration: 0s;"><div class="h-full p-3"><h3 class="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">SQL模板</h3><div class="space-y-2"><button class="w-full text-left p-2 text-xs bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 rounded border border-gray-200 dark:border-gray-600"><div class="font-medium text-gray-900 dark:text-gray-100">基础查询</div><div class="text-gray-600 dark:text-gray-400 truncate">SELECT * FROM users;</div></button><button class="w-full text-left p-2 text-xs bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 rounded border border-gray-200 dark:border-gray-600"><div class="font-medium text-gray-900 dark:text-gray-100">用户统计</div><div class="text-gray-600 dark:text-gray-400 truncate">SELECT COUNT(*) FROM users;</div></button><button class="w-full text-left p-2 text-xs bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 rounded border border-gray-200 dark:border-gray-600"><div class="font-medium text-gray-900 dark:text-gray-100">订单统计</div><div class="text-gray-600 dark:text-gray-400 truncate">SELECT COUNT(*) FROM orders;</div></button><button class="w-full text-left p-2 text-xs bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 rounded border border-gray-200 dark:border-gray-600"><div class="font-medium text-gray-900 dark:text-gray-100">产品列表</div><div class="text-gray-600 dark:text-gray-400 truncate">SELECT name, price FROM products LIMIT 10;</div></button><button class="w-full text-left p-2 text-xs bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 rounded border border-gray-200 dark:border-gray-600"><div class="font-medium text-gray-900 dark:text-gray-100">用户订单</div><div class="text-gray-600 dark:text-gray-400 truncate">SELECT u.username, o.total_amount FROM users u JOIN orders o ON u.id = o.user_id;</div></button></div></div></div><div data-state="inactive" data-orientation="horizontal" role="tabpanel" aria-labelledby="radix-:r0:-trigger-history" hidden="" id="radix-:r0:-content-history" tabindex="0" class="ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 h-full m-0 p-0"></div><div data-state="inactive" data-orientation="horizontal" role="tabpanel" aria-labelledby="radix-:r0:-trigger-database" hidden="" id="radix-:r0:-content-database" tabindex="0" class="ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 h-full m-0 p-0"></div></div></div></div><div class="flex-1 flex flex-col"><div class="flex-1 min-h-0"><div class="relative h-full flex flex-col"><div class="flex items-center justify-between p-2 border-b bg-gray-50 dark:bg-gray-800"><div class="flex items-center space-x-2"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-code-xml w-4 h-4 text-gray-600"><path d="m18 16 4-4-4-4"></path><path d="m6 8-4 4 4 4"></path><path d="m14.5 4-5 16"></path></svg><span class="text-sm font-medium text-gray-700 dark:text-gray-300">SQL编辑器</span></div><button class="flex items-center space-x-1 px-3 py-1 bg-blue-600 text-white rounded text-sm hover:bg-blue-700 transition-colors"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-zap w-3 h-3"><path d="M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z"></path></svg><span>执行</span></button></div><div class="relative flex-1 overflow-hidden"><div class="absolute left-0 top-0 bottom-0 w-12 bg-gray-100 dark:bg-gray-900 border-r border-gray-200 dark:border-gray-700"><pre class="p-2 text-xs text-gray-500 font-mono h-full overflow-hidden whitespace-pre">1</pre></div><pre class="absolute left-12 right-0 top-0 bottom-0 p-2 m-0 text-sm font-mono overflow-hidden whitespace-pre-wrap break-words pointer-events-none" style="color: transparent; background: transparent; scrollbar-width: none;"><code><span class="text-purple-600 font-semibold">SELECT</span> * <span class="text-purple-600 font-semibold">FROM</span> users <span class="text-purple-600 font-semibold">LIMIT</span> <span class="text-blue-600">5</span>;</code></pre><textarea placeholder="在此输入SQL查询... (Ctrl+Enter 执行, Ctrl+F 格式化)" class="absolute left-12 right-0 top-0 bottom-0 p-2 text-sm font-mono bg-transparent border-none outline-none resize-none overflow-auto caret-gray-800 dark:caret-gray-200 text-transparent selection:bg-blue-500/20" spellcheck="false" style="scrollbar-width: thin; color: transparent;">SELECT * FROM users LIMIT 5;</textarea></div><div class="flex items-center justify-between px-3 py-1 border-t bg-gray-50 dark:bg-gray-800 text-xs text-gray-600 dark:text-gray-400"><div class="flex items-center space-x-4"><span>行数: 1</span><span>字符数: 28</span><span>光标: 行 1, 列 29</span></div><div class="flex items-center space-x-2"><div class="w-2 h-2 bg-green-500 rounded-full"></div><span>就绪</span></div></div></div></div></div><div class="w-96 border-l border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800"><div class="h-full flex items-center justify-center bg-gray-50 dark:bg-gray-900"><div class="text-center"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-table2 w-16 h-16 text-gray-400 mx-auto mb-4"><path d="M9 3H5a2 2 0 0 0-2 2v4m6-6h10a2 2 0 0 1 2 2v4M9 3v18m0 0h10a2 2 0 0 0 2-2V9M9 21H5a2 2 0 0 1-2-2V9m0 0h18"></path></svg><h3 class="text-lg font-semibold text-gray-700 dark:text-gray-300 mb-2">等待查询结果</h3><p class="text-gray-500 dark:text-gray-400">执行SQL查询后，结果将在这里显示</p></div></div></div></div><footer class="bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 px-4 py-2"><div class="flex items-center justify-between text-xs text-gray-600 dark:text-gray-400"><div class="flex items-center space-x-4"><span>SQL编辑器 v1.0</span><span>•</span><span>本地SQLite数据库</span></div><div class="flex items-center space-x-4"><span>支持Ctrl+Enter快速执行</span><span>•</span><span>自动保存查询历史</span></div></div></footer></div></div>
+<style>
+#minimax-floating-ball {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  padding: 10px 12px;
+  background: #222222;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  color: #F8F8F8;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+  z-index: 9999;
+  transition: all 0.3s ease;
+  overflow: hidden;
+  cursor: pointer;
+}
+
+#minimax-floating-ball:hover {
+  transform: translateY(-2px);
+  background: #383838;
+}
+.minimax-ball-content {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.minimax-logo-wave {
+  width: 26px;
+  height: 22px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='26' height='22' viewBox='0 0 26 22' fill='none'%3E%3Cg clip-path='url(%23clip0_3442_102412)'%3E%3Cpath d='M12.8405 14.6775C12.8405 14.9897 13.0932 15.2424 13.4055 15.2424C13.7178 15.2424 13.9705 14.9897 13.9705 14.6775V2.98254C13.9705 1.88957 13.0809 1 11.9879 1C10.895 1 10.0054 1.88957 10.0054 2.98254V11.566V17.1068C10.0054 17.5773 9.62327 17.9594 9.1528 17.9594C8.68233 17.9594 8.30021 17.5773 8.30021 17.1068V8.04469C8.30021 6.95172 7.41063 6.06215 6.31767 6.06215C5.22471 6.06215 4.33513 6.95172 4.33513 8.04469V11.8855C4.33513 12.3559 3.953 12.7381 3.48254 12.7381C3.01207 12.7381 2.62994 12.3559 2.62994 11.8855V10.4936C2.62994 10.1813 2.37725 9.92861 2.06497 9.92861C1.7527 9.92861 1.5 10.1813 1.5 10.4936V11.8855C1.5 12.9784 2.38957 13.868 3.48254 13.868C4.5755 13.868 5.46508 12.9784 5.46508 11.8855V8.04469C5.46508 7.57422 5.8472 7.19209 6.31767 7.19209C6.78814 7.19209 7.17026 7.57422 7.17026 8.04469V17.1068C7.17026 18.1998 8.05984 19.0894 9.1528 19.0894C10.2458 19.0894 11.1353 18.1998 11.1353 17.1068V2.98254C11.1353 2.51207 11.5175 2.12994 11.9879 2.12994C12.4584 2.12994 12.8405 2.51207 12.8405 2.98254V14.6775Z' fill='%23F8F8F8'/%3E%3Cpath d='M23.3278 6.06215C22.2348 6.06215 21.3452 6.95172 21.3452 8.04469V15.6143C21.3452 16.0847 20.9631 16.4669 20.4926 16.4669C20.0222 16.4669 19.6401 16.0847 19.6401 15.6143V2.98254C19.6401 1.88957 18.7505 1 17.6575 1C16.5645 1 15.675 1.88957 15.675 2.98254V19.0175C15.675 19.4879 15.2928 19.8701 14.8224 19.8701C14.3519 19.8701 13.9698 19.4879 13.9698 19.0175V17.0329C13.9698 16.7206 13.7171 16.4679 13.4048 16.4679C13.0925 16.4679 12.8398 16.7206 12.8398 17.0329V19.0175C12.8398 20.1104 13.7294 21 14.8224 21C15.9153 21 16.8049 20.1104 16.8049 19.0175V2.98254C16.8049 2.51207 17.187 2.12994 17.6575 2.12994C18.128 2.12994 18.5101 2.51207 18.5101 2.98254V15.6143C18.5101 16.7072 19.3997 17.5968 20.4926 17.5968C21.5856 17.5968 22.4752 16.7072 22.4752 15.6143V8.04469C22.4752 7.57422 22.8573 7.19209 23.3278 7.19209C23.7982 7.19209 24.1804 7.57422 24.1804 8.04469V14.6775C24.1804 14.9897 24.4331 15.2424 24.7453 15.2424C25.0576 15.2424 25.3103 14.9897 25.3103 14.6775V8.04469C25.3103 6.95172 24.4207 6.06215 23.3278 6.06215Z' fill='%23F8F8F8'/%3E%3C/g%3E%3Cdefs%3E%3CclipPath id='clip0_3442_102412'%3E%3Crect width='25' height='22' fill='white' transform='translate(0.5)'/%3E%3C/clipPath%3E%3C/defs%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: center;
+}
+
+.minimax-ball-text {
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.minimax-close-icon {
+  margin-left: 8px;
+  font-size: 16px;
+  width: 18px;
+  height: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  cursor: pointer;
+  opacity: 0.7;
+  transition: opacity 0.2s ease;
+}
+
+.minimax-close-icon:hover {
+  opacity: 1;
+}
+</style>
+<div id="minimax-floating-ball" style="opacity: 1; transform: translateY(0px);">
+  <div class="minimax-ball-content">
+    <div class="minimax-logo-wave"></div>
+    <span class="minimax-ball-text">Created by MiniMax Agent</span>
+  </div>
+  <div class="minimax-close-icon">×</div>
+</div>
+<script>
+// Initialize floating ball functionality
+function initFloatingBall() {
+  const ball = document.getElementById('minimax-floating-ball');
+  if (!ball) return;
+
+  // Initial animation
+  ball.style.opacity = '0';
+  ball.style.transform = 'translateY(20px)';
+
+  setTimeout(() => {
+    ball.style.opacity = '1';
+    ball.style.transform = 'translateY(0)';
+  }, 500);
+
+  // Handle logo click
+  const ballContent = ball.querySelector('.minimax-ball-content');
+  ballContent.addEventListener('click', function (e) {
+    e.stopPropagation();
+    window.open('https://agent.minimaxi.com/', '_blank');
+    ball.style.transform = 'scale(0.95)';
+    setTimeout(() => {
+      ball.style.transform = 'scale(1)';
+    }, 100);
+  });
+
+  // Handle close button click
+  const closeIcon = ball.querySelector('.minimax-close-icon');
+  closeIcon.addEventListener('click', function (e) {
+    e.stopPropagation();
+    ball.style.opacity = '0';
+    ball.style.transform = 'translateY(20px)';
+
+    setTimeout(() => {
+      ball.style.display = 'none';
+    }, 300);
+  });
+}
+
+// Initialize when DOM is ready
+document.addEventListener('DOMContentLoaded', initFloatingBall); 
+</script>
+
+
+
+</body></html>
