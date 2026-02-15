@@ -4,7 +4,14 @@ const html_parse = @import("./html-parse.zig");
 
 pub fn get_manifest_from_html(allocator: std.mem.Allocator, html: []const u8) ![][]const u8 {
     const elements = try html_parse.parse(allocator, html);
-    defer allocator.free(elements);
+    defer {
+        for (elements) |element| {
+            if (element.attributes) |attributes| {
+                allocator.free(attributes);
+            }
+        }
+        allocator.free(elements);
+    }
     var manifest = try std.ArrayList([]const u8).initCapacity(allocator, 10);
     defer manifest.deinit(allocator);
     for (elements) |element| {
@@ -15,7 +22,6 @@ pub fn get_manifest_from_html(allocator: std.mem.Allocator, html: []const u8) ![
                         try manifest.append(allocator, attribute.value.?);
                     }
                 }
-                allocator.free(attributes);
             }
         }
     }

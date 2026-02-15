@@ -258,10 +258,7 @@ fn parseAttributes(allocator: std.mem.Allocator, html: []const u8, cursor: usize
             });
         } else {
             // Attribute without value (boolean attribute)
-            try attrs.append(allocator, Attr{
-                .name = attr_name,
-                .value = "",
-            });
+            try attrs.append(allocator, Attr{ .name = attr_name });
         }
     }
 
@@ -330,5 +327,13 @@ test "html_parse" {
         \\  </body>
         \\</html>
     ;
-    _ = try parse(std.testing.allocator, html);
+    const result = try parse(std.testing.allocator, html);
+    defer {
+        for (result) |element| {
+            if (element.attributes) |attributes| {
+                std.testing.allocator.free(attributes);
+            }
+        }
+        std.testing.allocator.free(result);
+    }
 }
