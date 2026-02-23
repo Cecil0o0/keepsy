@@ -24,6 +24,20 @@ pub fn get_manifest_from_html(allocator: std.mem.Allocator, html: []const u8) ![
                 }
             }
         }
+        if (std.mem.eql(u8, element.tagName, "link")) {
+            if (element.attributes) |attributes| {
+                for (attributes) |attribute| {
+                    if (std.mem.eql(u8, attribute.name, "rel")) {
+                        if (std.mem.eql(u8, attribute.value.?, "stylesheet") == false) {
+                            continue;
+                        }
+                    }
+                    if (std.mem.startsWith(u8, attribute.name, "href")) {
+                        try manifest.append(allocator, attribute.value.?);
+                    }
+                }
+            }
+        }
     }
     return manifest.toOwnedSlice(allocator);
 }
