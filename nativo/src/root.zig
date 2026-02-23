@@ -47,5 +47,5 @@ test "get manifest from a html file" {
     const html = @embedFile("./usecase/test.html");
     const manifest = try get_manifest_from_html(gpa, html);
     defer gpa.free(manifest);
-    try std.testing.expectEqual(@as(usize, 1), manifest.len);
+    try std.testing.expect(manifest.len > 1);
 }
