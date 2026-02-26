@@ -4,7 +4,7 @@ The Data Engine is un-named software for educational purpose, it gradually grows
 
 ## ZQL
 
-<img src="./zql.png" style="margin-left:calc(50% - 150px);height: 300px;" />
+<div style="text-align:center;"><img src="./zql.png" height="300" /></div>
 
 ZQL aims to satisfy requirements about operations on various data kind including two dimension, dense vector and binary, for any artificial intelligence applications.
 
