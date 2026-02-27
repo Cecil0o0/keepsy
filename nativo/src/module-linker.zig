@@ -30,6 +30,9 @@ pub fn linkModules(allocator: std.mem.Allocator, entries: *[1]Module) !void {
             binding_source: []const u8,
         }).init(allocator);
         defer linkage_symbol_table.deinit();
+        // A Data Structure for ease of insertion and lookup
+        var linked_modules = std.StringHashMap(bool).init(allocator);
+        defer linked_modules.deinit();
         // ArrayList for imported module code export symbols
         var imported_module_code_export_symbols = try std.ArrayList(u8).initCapacity(allocator, 1024 * 1024);
         defer imported_module_code_export_symbols.deinit(allocator);
@@ -107,98 +110,103 @@ pub fn linkModules(allocator: std.mem.Allocator, entries: *[1]Module) !void {
                             }
                             cursor += 1;
                             std.debug.print("ModuleSpecifier: {s}\n", .{ModuleSpecifier.items});
-                            var buf_path_to_file: [1024]u8 = undefined;
-                            const path_to_file = try resolve(&buf_path_to_file, ModuleSpecifier.items, path);
-                            std.debug.print("Resolved {s} to {s}\n", .{ ModuleSpecifier.items, path_to_file });
-                            const module_code = try std.fs.cwd().readFileAlloc(allocator, path_to_file, std.math.maxInt(usize));
-                            defer allocator.free(module_code);
-                            // parse ExportDeclaration
-                            // parse Declaration
-                            // parse HoistableDeclaration
-                            // parse FunctionDeclaration
-                            // reference: https://tc39.es/ecma262/#prod-ExportSpecifier
-                            var module_cursor: usize = 0;
-                            module_cursor = stripWhitespaceAndComments(module_code, module_cursor);
+                            if (linked_modules.contains(ModuleSpecifier.items)) {
+                                // same module already linked, don't link again.
+                            } else {
+                                try linked_modules.put(ModuleSpecifier.items, true);
+                                var buf_path_to_file: [1024]u8 = undefined;
+                                const path_to_file = try resolve(&buf_path_to_file, ModuleSpecifier.items, path);
+                                std.debug.print("Resolved {s} to {s}\n", .{ ModuleSpecifier.items, path_to_file });
+                                const module_code = try std.fs.cwd().readFileAlloc(allocator, path_to_file, std.math.maxInt(usize));
+                                defer allocator.free(module_code);
+                                // parse ExportDeclaration
+                                // parse Declaration
+                                // parse HoistableDeclaration
+                                // parse FunctionDeclaration
+                                // reference: https://tc39.es/ecma262/#prod-ExportSpecifier
+                                var module_cursor: usize = 0;
+                                module_cursor = stripWhitespaceAndComments(module_code, module_cursor);
 
-                            while (module_cursor < module_code.len) {
-                                if (peek(module_code, module_cursor, "export")) {
-                                    module_cursor += 6;
-                                    module_cursor = stripWhitespaceAndComments(module_code, module_cursor);
-
-                                    if (peek(module_code, module_cursor, "function")) {
-                                        module_cursor += 8;
+                                while (module_cursor < module_code.len) {
+                                    if (peek(module_code, module_cursor, "export")) {
+                                        module_cursor += 6;
                                         module_cursor = stripWhitespaceAndComments(module_code, module_cursor);
 
-                                        // Extract function name
-                                        const func_name_start = module_cursor;
-                                        while (module_cursor < module_code.len and
-                                            (std.ascii.isAlphanumeric(module_code[module_cursor]) or module_code[module_cursor] == '_'))
-                                        {
-                                            module_cursor += 1;
-                                        }
+                                        if (peek(module_code, module_cursor, "function")) {
+                                            module_cursor += 8;
+                                            module_cursor = stripWhitespaceAndComments(module_code, module_cursor);
 
-                                        const func_name = module_code[func_name_start..module_cursor];
-                                        std.debug.print("Found exported function: {s}\n", .{func_name});
+                                            // Extract function name
+                                            const func_name_start = module_cursor;
+                                            while (module_cursor < module_code.len and
+                                                (std.ascii.isAlphanumeric(module_code[module_cursor]) or module_code[module_cursor] == '_'))
+                                            {
+                                                module_cursor += 1;
+                                            }
 
-                                        // Find the end of the function declaration
-                                        var brace_count: usize = 0;
-                                        var in_string: bool = false;
-                                        var string_char: u8 = 0;
+                                            const func_name = module_code[func_name_start..module_cursor];
+                                            std.debug.print("Found exported function: {s}\n", .{func_name});
 
-                                        while (module_cursor < module_code.len) {
-                                            const char = module_code[module_cursor];
+                                            // Find the end of the function declaration
+                                            var brace_count: usize = 0;
+                                            var in_string: bool = false;
+                                            var string_char: u8 = 0;
 
-                                            if (in_string) {
-                                                if (char == string_char and module_code[module_cursor - 1] != '\\') {
-                                                    in_string = false;
-                                                }
-                                            } else {
-                                                if (char == '"' or char == '\'') {
-                                                    in_string = true;
-                                                    string_char = char;
-                                                } else if (char == '{') {
-                                                    brace_count += 1;
-                                                } else if (char == '}') {
-                                                    if (brace_count == 0) {
-                                                        // We've reached the end of the function body
-                                                        break;
+                                            while (module_cursor < module_code.len) {
+                                                const char = module_code[module_cursor];
+
+                                                if (in_string) {
+                                                    if (char == string_char and module_code[module_cursor - 1] != '\\') {
+                                                        in_string = false;
                                                     }
-                                                    brace_count -= 1;
+                                                } else {
+                                                    if (char == '"' or char == '\'') {
+                                                        in_string = true;
+                                                        string_char = char;
+                                                    } else if (char == '{') {
+                                                        brace_count += 1;
+                                                    } else if (char == '}') {
+                                                        if (brace_count == 0) {
+                                                            // We've reached the end of the function body
+                                                            break;
+                                                        }
+                                                        brace_count -= 1;
+                                                    }
                                                 }
+                                                module_cursor += 1;
                                             }
-                                            module_cursor += 1;
+
+                                            // Add function to symbol table
+                                            const func_name_slice_start = imported_module_code_export_symbols.items.len;
+                                            imported_module_code_export_symbols.appendSlice(allocator, func_name) catch |err| {
+                                                switch (err) {
+                                                    std.mem.Allocator.Error.OutOfMemory => return error.syntaxError,
+                                                    else => return err,
+                                                }
+                                            };
+                                            const func_name_slice = imported_module_code_export_symbols.items[func_name_slice_start..];
+                                            try linkage_symbol_table.put(func_name_slice, .{
+                                                .name = func_name_slice,
+                                                .kind = "FunctionDeclaration",
+                                                .binding_source = "",
+                                            });
                                         }
-
-                                        // Add function to symbol table
-                                        const func_name_slice_start = imported_module_code_export_symbols.items.len;
-                                        imported_module_code_export_symbols.appendSlice(allocator, func_name) catch |err| {
-                                            switch (err) {
-                                                std.mem.Allocator.Error.OutOfMemory => return error.syntaxError,
-                                                else => return err,
-                                            }
-                                        };
-                                        const func_name_slice = imported_module_code_export_symbols.items[func_name_slice_start..];
-                                        try linkage_symbol_table.put(func_name_slice, .{
-                                            .name = func_name_slice,
-                                            .kind = "FunctionDeclaration",
-                                            .binding_source = "",
-                                        });
                                     }
-                                }
 
-                                module_cursor += 1;
+                                    module_cursor += 1;
+                                }
+                                try output.appendSlice(allocator, module_code);
                             }
-                            try output.appendSlice(allocator, module_code);
 
                             // write binding code by exported FunctionDeclaration
                             var iter = linkage_symbol_table.iterator();
                             while (iter.next()) |entry| {
-                                if (std.mem.eql(u8, entry.value_ptr.kind, "ImportedBinding") and linkage_symbol_table.contains(entry.value_ptr.binding_source)) {
+                                if (std.mem.eql(u8, entry.value_ptr.kind, "ImportedBinding")) {
                                     try output.appendSlice(allocator, "\n// Define an immutable ImportedBinding here");
                                     try output.appendSlice(allocator, "\nconst ");
                                     try output.appendSlice(allocator, entry.value_ptr.name);
                                     try output.appendSlice(allocator, " = ");
-                                    try output.appendSlice(allocator, linkage_symbol_table.get(entry.value_ptr.binding_source).?.name);
+                                    try output.appendSlice(allocator, entry.value_ptr.binding_source);
                                     try output.appendSlice(allocator, ";\n");
                                 }
                             }
