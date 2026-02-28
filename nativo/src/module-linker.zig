@@ -52,7 +52,7 @@ pub fn linkModules(allocator: std.mem.Allocator, entries: *[1]Module) !void {
         var buf: [1024]u8 = undefined;
         var buf_parent: [1024]u8 = undefined;
         const path = try resolve(&buf, module.specifier, try std.fs.realpath("./module-linker.zig", &buf_parent));
-        std.debug.print("Resolved {s} to {s}\n", .{ module.specifier, path });
+        std.debug.print("📦 {s} → {s}\n", .{ module.specifier, path });
         const code = try std.fs.cwd().readFileAlloc(state.allocator, path, std.math.maxInt(usize));
         defer state.allocator.free(code);
 
@@ -80,7 +80,7 @@ pub fn linkModules(allocator: std.mem.Allocator, entries: *[1]Module) !void {
                         cursor += 1;
                     }
                     cursor += 1;
-                    std.debug.print("NamedImports: {s}\n", .{NamedImports.items});
+                    std.debug.print("   📥 imports {{ {s} }}\n", .{NamedImports.items});
                     // support ModuleExportName as ImportedBinding
                     // In this case: import { a as b }, a is ModuleExportName whereas b is ImportedBinding
                     // reference: https://tc39.es/ecma262/#prod-ImportedBinding
@@ -101,7 +101,7 @@ pub fn linkModules(allocator: std.mem.Allocator, entries: *[1]Module) !void {
                             });
                             var iter = state.linkage_symbol_table.iterator();
                             while (iter.next()) |entry| {
-                                std.debug.print("Iteration on linkage_symbol_table: {s}: {s}, {s}, {s}\n", .{ entry.key_ptr.*, entry.value_ptr.name, entry.value_ptr.kind, entry.value_ptr.binding_source });
+                                std.debug.print("   🔗 {s} ({s}) from {s}\n", .{ entry.value_ptr.name, entry.value_ptr.kind, entry.value_ptr.binding_source });
                             }
                             break;
                         }
@@ -128,14 +128,14 @@ pub fn linkModules(allocator: std.mem.Allocator, entries: *[1]Module) !void {
                                 cursor += 1;
                             }
                             cursor += 1;
-                            std.debug.print("ModuleSpecifier: {s}\n", .{ModuleSpecifier.items});
+                            std.debug.print("   📍 from {s}\n", .{ModuleSpecifier.items});
                             if (state.linked_modules.contains(ModuleSpecifier.items)) {
                                 // same module already linked, don't link again.
                             } else {
                                 try state.linked_modules.put(ModuleSpecifier.items, true);
                                 var buf_path_to_file: [1024]u8 = undefined;
                                 const path_to_file = try resolve(&buf_path_to_file, ModuleSpecifier.items, path);
-                                std.debug.print("Resolved {s} to {s}\n", .{ ModuleSpecifier.items, path_to_file });
+                                std.debug.print("   🔗 {s} → {s}\n", .{ ModuleSpecifier.items, path_to_file });
                                 const module_code = try std.fs.cwd().readFileAlloc(state.allocator, path_to_file, std.math.maxInt(usize));
                                 defer allocator.free(module_code);
                                 // parse ExportDeclaration
@@ -164,7 +164,7 @@ pub fn linkModules(allocator: std.mem.Allocator, entries: *[1]Module) !void {
                                             }
 
                                             const func_name = module_code[func_name_start..module_cursor];
-                                            std.debug.print("Found exported function: {s}\n", .{func_name});
+                                            std.debug.print("   ✨ export function {s}\n", .{func_name});
 
                                             // Find the end of the function declaration
                                             var brace_count: usize = 0;
@@ -288,7 +288,7 @@ fn resolve(buf: []u8, specifier: []const u8, parent: []const u8) ![]const u8 {
         try resolved.appendSliceBounded(dirname[0..i]);
         try resolved.appendBounded('/');
         try resolved.appendSliceBounded(specifier[cursor_specifier..]);
-        std.debug.print("Resolved path: {s}\n", .{resolved.items});
+        std.debug.print("   📍 → {s}\n", .{resolved.items});
         return resolved.items;
     }
     return specifier;
