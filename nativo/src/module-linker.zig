@@ -7,35 +7,54 @@ pub const Module = struct {
     specifier: []const u8,
 };
 
+/// Symbol info for linkage
+pub const SymbolInfo = struct {
+    name: []const u8,
+    kind: []const u8,
+    binding_source: []const u8,
+};
+
+/// State for module linking
+pub const State = struct {
+    allocator: std.mem.Allocator,
+    output: std.ArrayList(u8),
+    linkage_symbol_table: std.StringHashMap(SymbolInfo),
+    linked_modules: std.StringHashMap(bool),
+    imported_module_code_export_symbols: std.ArrayList(u8),
+
+    fn init(allocator: std.mem.Allocator) !State {
+        return State{
+            .allocator = allocator,
+            .output = try std.ArrayList(u8).initCapacity(allocator, 1024 * 1024),
+            .linkage_symbol_table = std.StringHashMap(SymbolInfo).init(allocator),
+            .linked_modules = std.StringHashMap(bool).init(allocator),
+            .imported_module_code_export_symbols = try std.ArrayList(u8).initCapacity(allocator, 1024 * 1024),
+        };
+    }
+
+    fn deinit(self: *State) void {
+        self.output.deinit(self.allocator);
+        self.linkage_symbol_table.deinit();
+        self.linked_modules.deinit();
+        self.imported_module_code_export_symbols.deinit(self.allocator);
+    }
+};
+
+
 // this function receives an array of modules as entries, to start with them and parse all import statements and link them all together into one big module.
 // It returns multiple string with all the code linked together for every entries, maybe a css module or a js module.
 // It supports to stripe typescript syntax, so module could contains typescript code.
 pub fn linkModules(allocator: std.mem.Allocator, entries: *[1]Module) !void {
+    var state = try State.init(allocator);
+    defer state.deinit();
+
     for (entries) |module| {
         var buf: [1024]u8 = undefined;
         var buf_parent: [1024]u8 = undefined;
         const path = try resolve(&buf, module.specifier, try std.fs.realpath("./module-linker.zig", &buf_parent));
         std.debug.print("Resolved {s} to {s}\n", .{ module.specifier, path });
-        const code = try std.fs.cwd().readFileAlloc(allocator, path, std.math.maxInt(usize));
-        defer allocator.free(code);
-
-        // allocate for output module.
-        // 1MB for initialization, and it can grow up automatically.
-        var output = try std.ArrayList(u8).initCapacity(allocator, 1024 * 1024);
-        defer output.deinit(allocator);
-        // allocate for symbol table.
-        var linkage_symbol_table = std.StringHashMap(struct {
-            name: []const u8,
-            kind: []const u8,
-            binding_source: []const u8,
-        }).init(allocator);
-        defer linkage_symbol_table.deinit();
-        // A Data Structure for ease of insertion and lookup
-        var linked_modules = std.StringHashMap(bool).init(allocator);
-        defer linked_modules.deinit();
-        // ArrayList for imported module code export symbols
-        var imported_module_code_export_symbols = try std.ArrayList(u8).initCapacity(allocator, 1024 * 1024);
-        defer imported_module_code_export_symbols.deinit(allocator);
+        const code = try std.fs.cwd().readFileAlloc(state.allocator, path, std.math.maxInt(usize));
+        defer state.allocator.free(code);
 
         var cursor: usize = 0;
         var end_of_linking_cursor: usize = 0;
@@ -52,7 +71,7 @@ pub fn linkModules(allocator: std.mem.Allocator, entries: *[1]Module) !void {
                     var buf_NamedImports: [512]u8 = undefined;
                     var NamedImports = std.ArrayList(u8).initBuffer(&buf_NamedImports);
                     while (cursor < code.len and code[cursor] != '}') {
-                        NamedImports.append(allocator, code[cursor]) catch |err| {
+                        NamedImports.append(state.allocator, code[cursor]) catch |err| {
                             switch (err) {
                                 error.OutOfMemory => return error.syntaxError,
                                 else => return err,
@@ -75,12 +94,12 @@ pub fn linkModules(allocator: std.mem.Allocator, entries: *[1]Module) !void {
                             cursor_NamedImports = stripWhitespace(NamedImports.items, cursor_NamedImports);
                             const cursor_NamedImports_after_as = cursor_NamedImports;
 
-                            try linkage_symbol_table.put(NamedImports.items[cursor_NamedImports_after_as..NamedImports.items.len], .{
+                            try state.linkage_symbol_table.put(NamedImports.items[cursor_NamedImports_after_as..NamedImports.items.len], .{
                                 .name = NamedImports.items[cursor_NamedImports_after_as..NamedImports.items.len],
                                 .kind = "ImportedBinding",
                                 .binding_source = NamedImports.items[0..cursor_NamedImports_before_as],
                             });
-                            var iter = linkage_symbol_table.iterator();
+                            var iter = state.linkage_symbol_table.iterator();
                             while (iter.next()) |entry| {
                                 std.debug.print("Iteration on linkage_symbol_table: {s}: {s}, {s}, {s}\n", .{ entry.key_ptr.*, entry.value_ptr.name, entry.value_ptr.kind, entry.value_ptr.binding_source });
                             }
@@ -100,7 +119,7 @@ pub fn linkModules(allocator: std.mem.Allocator, entries: *[1]Module) !void {
                             var buf_ModuleSpecifier: [64]u8 = undefined;
                             var ModuleSpecifier = std.ArrayList(u8).initBuffer(&buf_ModuleSpecifier);
                             while (cursor < code.len and code[cursor] != '\'') {
-                                ModuleSpecifier.append(allocator, code[cursor]) catch |err| {
+                                ModuleSpecifier.append(state.allocator, code[cursor]) catch |err| {
                                     switch (err) {
                                         std.mem.Allocator.Error.OutOfMemory => return error.syntaxError,
                                         else => return err,
@@ -110,14 +129,14 @@ pub fn linkModules(allocator: std.mem.Allocator, entries: *[1]Module) !void {
                             }
                             cursor += 1;
                             std.debug.print("ModuleSpecifier: {s}\n", .{ModuleSpecifier.items});
-                            if (linked_modules.contains(ModuleSpecifier.items)) {
+                            if (state.linked_modules.contains(ModuleSpecifier.items)) {
                                 // same module already linked, don't link again.
                             } else {
-                                try linked_modules.put(ModuleSpecifier.items, true);
+                                try state.linked_modules.put(ModuleSpecifier.items, true);
                                 var buf_path_to_file: [1024]u8 = undefined;
                                 const path_to_file = try resolve(&buf_path_to_file, ModuleSpecifier.items, path);
                                 std.debug.print("Resolved {s} to {s}\n", .{ ModuleSpecifier.items, path_to_file });
-                                const module_code = try std.fs.cwd().readFileAlloc(allocator, path_to_file, std.math.maxInt(usize));
+                                const module_code = try std.fs.cwd().readFileAlloc(state.allocator, path_to_file, std.math.maxInt(usize));
                                 defer allocator.free(module_code);
                                 // parse ExportDeclaration
                                 // parse Declaration
@@ -177,15 +196,15 @@ pub fn linkModules(allocator: std.mem.Allocator, entries: *[1]Module) !void {
                                             }
 
                                             // Add function to symbol table
-                                            const func_name_slice_start = imported_module_code_export_symbols.items.len;
-                                            imported_module_code_export_symbols.appendSlice(allocator, func_name) catch |err| {
+                                            const func_name_slice_start = state.imported_module_code_export_symbols.items.len;
+                                            state.imported_module_code_export_symbols.appendSlice(state.allocator, func_name) catch |err| {
                                                 switch (err) {
                                                     std.mem.Allocator.Error.OutOfMemory => return error.syntaxError,
                                                     else => return err,
                                                 }
                                             };
-                                            const func_name_slice = imported_module_code_export_symbols.items[func_name_slice_start..];
-                                            try linkage_symbol_table.put(func_name_slice, .{
+                                            const func_name_slice = state.imported_module_code_export_symbols.items[func_name_slice_start..];
+                                            try state.linkage_symbol_table.put(func_name_slice, .{
                                                 .name = func_name_slice,
                                                 .kind = "FunctionDeclaration",
                                                 .binding_source = "",
@@ -195,19 +214,19 @@ pub fn linkModules(allocator: std.mem.Allocator, entries: *[1]Module) !void {
 
                                     module_cursor += 1;
                                 }
-                                try output.appendSlice(allocator, module_code);
+                                try state.output.appendSlice(state.allocator, module_code);
                             }
 
                             // write binding code by exported FunctionDeclaration
-                            var iter = linkage_symbol_table.iterator();
+                            var iter = state.linkage_symbol_table.iterator();
                             while (iter.next()) |entry| {
                                 if (std.mem.eql(u8, entry.value_ptr.kind, "ImportedBinding")) {
-                                    try output.appendSlice(allocator, "\n// Define an immutable ImportedBinding here");
-                                    try output.appendSlice(allocator, "\nconst ");
-                                    try output.appendSlice(allocator, entry.value_ptr.name);
-                                    try output.appendSlice(allocator, " = ");
-                                    try output.appendSlice(allocator, entry.value_ptr.binding_source);
-                                    try output.appendSlice(allocator, ";\n");
+                                    try state.output.appendSlice(state.allocator, "\n// Define an immutable ImportedBinding here");
+                                    try state.output.appendSlice(state.allocator, "\nconst ");
+                                    try state.output.appendSlice(state.allocator, entry.value_ptr.name);
+                                    try state.output.appendSlice(state.allocator, " = ");
+                                    try state.output.appendSlice(state.allocator, entry.value_ptr.binding_source);
+                                    try state.output.appendSlice(state.allocator, ";\n");
                                 }
                             }
 
@@ -229,7 +248,7 @@ pub fn linkModules(allocator: std.mem.Allocator, entries: *[1]Module) !void {
             cursor += 1;
         }
 
-        try output.appendSlice(allocator, code[end_of_linking_cursor..]);
+        try state.output.appendSlice(state.allocator, code[end_of_linking_cursor..]);
         std.fs.cwd().access("dist", .{ .mode = .read_write }) catch |err| {
             if (err == error.FileNotFound) {
                 try std.fs.cwd().makeDir("dist");
@@ -237,7 +256,7 @@ pub fn linkModules(allocator: std.mem.Allocator, entries: *[1]Module) !void {
                 return err;
             }
         };
-        try std.fs.cwd().writeFile(.{ .data = output.items, .sub_path = "dist/output.ts", .flags = .{ .read = true } });
+        try std.fs.cwd().writeFile(.{ .data = state.output.items, .sub_path = "dist/state.output.ts", .flags = .{ .read = true } });
     }
 }
 
