@@ -40,7 +40,6 @@ pub const State = struct {
     }
 };
 
-
 // this function receives an array of modules as entries, to start with them and parse all import statements and link them all together into one big module.
 // It returns multiple string with all the code linked together for every entries, maybe a css module or a js module.
 // It supports to stripe typescript syntax, so module could contains typescript code.
@@ -66,7 +65,7 @@ pub fn linkModules(allocator: std.mem.Allocator, entries: *[1]Module) !void {
                 cursor = stripWhitespace(code, cursor);
                 if (peek(code, cursor, "{")) {
                     cursor += 1;
-                    // try to parse NamedImports in ImportClause
+                    // consume NamedImports in ImportClause
                     cursor = stripWhitespace(code, cursor);
                     var buf_NamedImports: [512]u8 = undefined;
                     var NamedImports = std.ArrayList(u8).initBuffer(&buf_NamedImports);
@@ -94,8 +93,19 @@ pub fn linkModules(allocator: std.mem.Allocator, entries: *[1]Module) !void {
                             cursor_NamedImports = stripWhitespace(NamedImports.items, cursor_NamedImports);
                             const cursor_NamedImports_after_as = cursor_NamedImports;
 
-                            try state.linkage_symbol_table.put(NamedImports.items[cursor_NamedImports_after_as..NamedImports.items.len], .{
-                                .name = NamedImports.items[cursor_NamedImports_after_as..NamedImports.items.len],
+                            // cosume an identifier
+                            var identifier_index = cursor_NamedImports_after_as;
+                            while (identifier_index < NamedImports.items.len) {
+                                if (std.ascii.isAlphanumeric(NamedImports.items[identifier_index]) or NamedImports.items[identifier_index] == '_') {
+                                    identifier_index += 1;
+                                } else {
+                                    break;
+                                }
+                            }
+                            std.debug.print("{d} {d}", .{ cursor_NamedImports_after_as, identifier_index });
+
+                            try state.linkage_symbol_table.put(NamedImports.items[cursor_NamedImports_after_as..identifier_index], .{
+                                .name = NamedImports.items[cursor_NamedImports_after_as..identifier_index],
                                 .kind = "ImportedBinding",
                                 .binding_source = NamedImports.items[0..cursor_NamedImports_before_as],
                             });
