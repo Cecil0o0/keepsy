@@ -9,7 +9,6 @@ pub const Module = struct {
 
 /// Symbol info for linkage
 pub const SymbolInfo = struct {
-    name: []const u8,
     kind: []const u8,
     binding_source: []const u8,
 };
@@ -34,6 +33,11 @@ pub const State = struct {
 
     fn deinit(self: *State) void {
         self.output.deinit(self.allocator);
+        var iter = self.linkage_symbol_table.iterator();
+        while (iter.next()) |entry| {
+            self.allocator.free(entry.key_ptr.*);
+            if (entry.value_ptr.binding_source.len > 0) self.allocator.free(entry.value_ptr.binding_source);
+        }
         self.linkage_symbol_table.deinit();
         self.linked_modules.deinit();
         self.imported_module_code_export_symbols.deinit(self.allocator);
@@ -51,7 +55,6 @@ pub fn linkModules(allocator: std.mem.Allocator, entries: *[1]Module) !void {
         var buf: [1024]u8 = undefined;
         var buf_parent: [1024]u8 = undefined;
         const path = try resolve(&buf, module.specifier, try std.fs.realpath("./module-linker.zig", &buf_parent));
-        std.debug.print("📦 {s} → {s}\n", .{ module.specifier, path });
         const code = try std.fs.cwd().readFileAlloc(state.allocator, path, std.math.maxInt(usize));
         defer state.allocator.free(code);
 
@@ -65,8 +68,8 @@ pub fn linkModules(allocator: std.mem.Allocator, entries: *[1]Module) !void {
                 cursor = stripWhitespace(code, cursor);
                 if (peek(code, cursor, "{")) {
                     cursor += 1;
-                    // consume NamedImports in ImportClause
                     cursor = stripWhitespace(code, cursor);
+                    // try toconsume NamedImports in ImportClause
                     var buf_NamedImports: [512]u8 = undefined;
                     var NamedImports = std.ArrayList(u8).initBuffer(&buf_NamedImports);
                     while (cursor < code.len and code[cursor] != '}') {
@@ -87,33 +90,35 @@ pub fn linkModules(allocator: std.mem.Allocator, entries: *[1]Module) !void {
                     var cursor_NamedImports: usize = 0;
                     cursor_NamedImports = stripWhitespace(NamedImports.items, cursor_NamedImports);
                     while (cursor_NamedImports < NamedImports.items.len) {
-                        if (peek(NamedImports.items, cursor_NamedImports, "as")) {
-                            const cursor_NamedImports_before_as = cursor_NamedImports;
-                            cursor_NamedImports += 2;
+                        if (peekIdentifier(NamedImports.items, cursor_NamedImports)) {
+                            const ModuleExportName = consumeIdentifier(NamedImports.items, &cursor_NamedImports);
+                            const ModuleExportNameCopy = try state.allocator.dupe(u8, ModuleExportName);
                             cursor_NamedImports = stripWhitespace(NamedImports.items, cursor_NamedImports);
-                            const cursor_NamedImports_after_as = cursor_NamedImports;
-
-                            // cosume an identifier
-                            var identifier_index = cursor_NamedImports_after_as;
-                            while (identifier_index < NamedImports.items.len) {
-                                if (std.ascii.isAlphanumeric(NamedImports.items[identifier_index]) or NamedImports.items[identifier_index] == '_') {
-                                    identifier_index += 1;
-                                } else {
-                                    break;
-                                }
+                            if (peek(NamedImports.items, cursor_NamedImports, "as")) {
+                                cursor_NamedImports += 2;
+                                cursor_NamedImports = stripWhitespace(NamedImports.items, cursor_NamedImports);
+                                // cosume an identifier
+                                const ImportedBinding = consumeIdentifier(NamedImports.items, &cursor_NamedImports);
+                                const ImportedBindingCopy = try state.allocator.dupe(u8, ImportedBinding);
+                                try state.linkage_symbol_table.put(ImportedBindingCopy, .{
+                                    .kind = "ImportedBinding",
+                                    .binding_source = ModuleExportNameCopy,
+                                });
+                            } else {
+                                try state.linkage_symbol_table.put(ModuleExportNameCopy, .{
+                                    .kind = "ModuleExportName",
+                                    .binding_source = "",
+                                });
+                                std.debug.print("   📥📥📥📥 {s}\n", .{
+                                    ModuleExportName,
+                                });
                             }
-                            std.debug.print("{d} {d}", .{ cursor_NamedImports_after_as, identifier_index });
-
-                            try state.linkage_symbol_table.put(NamedImports.items[cursor_NamedImports_after_as..identifier_index], .{
-                                .name = NamedImports.items[cursor_NamedImports_after_as..identifier_index],
-                                .kind = "ImportedBinding",
-                                .binding_source = NamedImports.items[0..cursor_NamedImports_before_as],
-                            });
-                            var iter = state.linkage_symbol_table.iterator();
-                            while (iter.next()) |entry| {
-                                std.debug.print("   🔗 {s} ({s}) from {s}\n", .{ entry.value_ptr.name, entry.value_ptr.kind, entry.value_ptr.binding_source });
+                            cursor_NamedImports = stripWhitespace(NamedImports.items, cursor_NamedImports);
+                            if (peek(code, cursor_NamedImports, ",")) {
+                                cursor_NamedImports += 1;
+                                cursor_NamedImports = stripWhitespace(NamedImports.items, cursor_NamedImports);
+                                continue;
                             }
-                            break;
                         }
                         cursor_NamedImports += 1;
                     }
@@ -138,14 +143,12 @@ pub fn linkModules(allocator: std.mem.Allocator, entries: *[1]Module) !void {
                                 cursor += 1;
                             }
                             cursor += 1;
-                            std.debug.print("   📍 from {s}\n", .{ModuleSpecifier.items});
                             if (state.linked_modules.contains(ModuleSpecifier.items)) {
                                 // same module already linked, don't link again.
                             } else {
                                 try state.linked_modules.put(ModuleSpecifier.items, true);
                                 var buf_path_to_file: [1024]u8 = undefined;
                                 const path_to_file = try resolve(&buf_path_to_file, ModuleSpecifier.items, path);
-                                std.debug.print("   🔗 {s} → {s}\n", .{ ModuleSpecifier.items, path_to_file });
                                 const module_code = try std.fs.cwd().readFileAlloc(state.allocator, path_to_file, std.math.maxInt(usize));
                                 defer allocator.free(module_code);
                                 // parse ExportDeclaration
@@ -165,15 +168,8 @@ pub fn linkModules(allocator: std.mem.Allocator, entries: *[1]Module) !void {
                                             module_cursor += 8;
                                             module_cursor = stripWhitespaceAndComments(module_code, module_cursor);
 
-                                            // Extract function name
-                                            const func_name_start = module_cursor;
-                                            while (module_cursor < module_code.len and
-                                                (std.ascii.isAlphanumeric(module_code[module_cursor]) or module_code[module_cursor] == '_'))
-                                            {
-                                                module_cursor += 1;
-                                            }
-
-                                            const func_name = module_code[func_name_start..module_cursor];
+                                            // consume function name
+                                            const func_name = consumeIdentifier(module_code, &module_cursor);
                                             std.debug.print("   ✨ export function {s}\n", .{func_name});
 
                                             // Find the end of the function declaration
@@ -215,7 +211,6 @@ pub fn linkModules(allocator: std.mem.Allocator, entries: *[1]Module) !void {
                                             };
                                             const func_name_slice = state.imported_module_code_export_symbols.items[func_name_slice_start..];
                                             try state.linkage_symbol_table.put(func_name_slice, .{
-                                                .name = func_name_slice,
                                                 .kind = "FunctionDeclaration",
                                                 .binding_source = "",
                                             });
@@ -226,20 +221,6 @@ pub fn linkModules(allocator: std.mem.Allocator, entries: *[1]Module) !void {
                                 }
                                 try state.output.appendSlice(state.allocator, module_code);
                             }
-
-                            // write binding code by exported FunctionDeclaration
-                            var iter = state.linkage_symbol_table.iterator();
-                            while (iter.next()) |entry| {
-                                if (std.mem.eql(u8, entry.value_ptr.kind, "ImportedBinding")) {
-                                    try state.output.appendSlice(state.allocator, "\n// Define an immutable ImportedBinding here");
-                                    try state.output.appendSlice(state.allocator, "\nconst ");
-                                    try state.output.appendSlice(state.allocator, entry.value_ptr.name);
-                                    try state.output.appendSlice(state.allocator, " = ");
-                                    try state.output.appendSlice(state.allocator, entry.value_ptr.binding_source);
-                                    try state.output.appendSlice(state.allocator, ";\n");
-                                }
-                            }
-
                             continue;
                         }
                     }
@@ -258,6 +239,20 @@ pub fn linkModules(allocator: std.mem.Allocator, entries: *[1]Module) !void {
             cursor += 1;
         }
 
+        // write binding code by exported FunctionDeclaration
+        var iter = state.linkage_symbol_table.iterator();
+        while (iter.next()) |entry| {
+            std.debug.print("   🔗🔗🔗 {s} ({s}) from {s}\n", .{ entry.key_ptr.*, entry.value_ptr.kind, entry.value_ptr.binding_source });
+            if (std.mem.eql(u8, entry.value_ptr.kind, "ImportedBinding")) {
+                try state.output.appendSlice(state.allocator, "\n// Define an immutable ImportedBinding here");
+                try state.output.appendSlice(state.allocator, "\nconst ");
+                try state.output.appendSlice(state.allocator, entry.key_ptr.*);
+                try state.output.appendSlice(state.allocator, " = ");
+                try state.output.appendSlice(state.allocator, entry.value_ptr.binding_source);
+                try state.output.appendSlice(state.allocator, ";\n");
+            }
+        }
+
         try state.output.appendSlice(state.allocator, code[end_of_linking_cursor..]);
         std.fs.cwd().access("dist", .{ .mode = .read_write }) catch |err| {
             if (err == error.FileNotFound) {
@@ -266,7 +261,7 @@ pub fn linkModules(allocator: std.mem.Allocator, entries: *[1]Module) !void {
                 return err;
             }
         };
-        try std.fs.cwd().writeFile(.{ .data = state.output.items, .sub_path = "dist/state.output.ts", .flags = .{ .read = true } });
+        try std.fs.cwd().writeFile(.{ .data = state.output.items, .sub_path = "dist/output.ts", .flags = .{ .read = true } });
     }
 }
 
@@ -298,7 +293,6 @@ fn resolve(buf: []u8, specifier: []const u8, parent: []const u8) ![]const u8 {
         try resolved.appendSliceBounded(dirname[0..i]);
         try resolved.appendBounded('/');
         try resolved.appendSliceBounded(specifier[cursor_specifier..]);
-        std.debug.print("   📍 → {s}\n", .{resolved.items});
         return resolved.items;
     }
     return specifier;
@@ -309,6 +303,21 @@ fn peek(code: []const u8, cursor: usize, pattern: []const u8) bool {
     if (cursor + pattern.len > code.len) return false;
     if (std.mem.startsWith(u8, code[cursor..], pattern)) return true;
     return false;
+}
+
+// _aa, a1, A1
+fn peekIdentifier(code: []const u8, cursor: usize) bool {
+    if (cursor + 1 > code.len) return false;
+    if (std.ascii.isAlphabetic(code[cursor]) or code[cursor] == '_') return true;
+    return false;
+}
+
+fn consumeIdentifier(code: []const u8, cursor: *usize) []const u8 {
+    const start = cursor.*;
+    while (cursor.* < code.len) {
+        if (std.ascii.isAlphanumeric(code[cursor.*]) or code[cursor.*] == '_') cursor.* += 1 else break;
+    }
+    return code[start..cursor.*];
 }
 
 // strip often refers to removing non-essential characters from the source code before parsing begins
