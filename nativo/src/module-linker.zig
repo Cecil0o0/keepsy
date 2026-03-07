@@ -7,17 +7,30 @@ pub const Module = struct {
     specifier: []const u8,
 };
 
-/// Symbol info for linkage
-pub const SymbolInfo = struct {
-    kind: []const u8,
-    binding_source: []const u8,
+/// In computer science, a symbol is an identifier used by Linker to manage and resolve references between separately compiled modules of code.
+/// It serves as the fundamental abstraction that allows distinct object files to be combined into a single executable or library.
+pub const Symbol = struct {
+    // the value of ModuleExportName, ImportedDefaultBiding
+    name: ?[]const u8 = "",
+    // "VariableDeclaration", "LexicalDeclaration", "FunctionDeclaration", "ClassDeclaration"
+    kind: ?[]const u8 = "",
+    // to detect if the symbol is a const LexicalDeclaration
+    is_const: ?bool = null,
+    // This indicates the visible scope of the symbol, such as `Global`, `Module`, or `Local`
+    // Symbol would be resolvable only if it is in the correct scope
+    binding: ?[]const u8 = "",
+    // "import", "export"
+    linkage: ?[]const u8 = "import",
+    // "ImportedBinding", "ModuleExportName"
+    @"[[LinkKind]]": []const u8,
+    @"[[ImportedBindingValue]]": []const u8,
 };
 
 /// State for module linking
 pub const State = struct {
     allocator: std.mem.Allocator,
     output: std.ArrayList(u8),
-    linkage_symbol_table: std.StringHashMap(SymbolInfo),
+    symbol_table: std.StringHashMap(Symbol),
     linked_modules: std.StringHashMap(bool),
     imported_module_code_export_symbols: std.ArrayList(u8),
 
@@ -25,7 +38,8 @@ pub const State = struct {
         return State{
             .allocator = allocator,
             .output = try std.ArrayList(u8).initCapacity(allocator, 1024 * 1024),
-            .linkage_symbol_table = std.StringHashMap(SymbolInfo).init(allocator),
+            // String is the ModuleExportName, it would be a semantic slice to get the symbol
+            .symbol_table = std.StringHashMap(Symbol).init(allocator),
             .linked_modules = std.StringHashMap(bool).init(allocator),
             .imported_module_code_export_symbols = try std.ArrayList(u8).initCapacity(allocator, 1024 * 1024),
         };
@@ -33,12 +47,12 @@ pub const State = struct {
 
     fn deinit(self: *State) void {
         self.output.deinit(self.allocator);
-        var iter = self.linkage_symbol_table.iterator();
+        var iter = self.symbol_table.iterator();
         while (iter.next()) |entry| {
             self.allocator.free(entry.key_ptr.*);
-            if (entry.value_ptr.binding_source.len > 0) self.allocator.free(entry.value_ptr.binding_source);
+            if (entry.value_ptr.@"[[ImportedBindingValue]]".len > 0) self.allocator.free(entry.value_ptr.@"[[ImportedBindingValue]]");
         }
-        self.linkage_symbol_table.deinit();
+        self.symbol_table.deinit();
         self.linked_modules.deinit();
         self.imported_module_code_export_symbols.deinit(self.allocator);
     }
@@ -100,18 +114,16 @@ pub fn linkModules(allocator: std.mem.Allocator, entries: *[1]Module) !void {
                                 // cosume an identifier
                                 const ImportedBinding = consumeIdentifier(NamedImports.items, &cursor_NamedImports);
                                 const ImportedBindingCopy = try state.allocator.dupe(u8, ImportedBinding);
-                                try state.linkage_symbol_table.put(ImportedBindingCopy, .{
-                                    .kind = "ImportedBinding",
-                                    .binding_source = ModuleExportNameCopy,
+                                try state.symbol_table.put(ImportedBindingCopy, .{
+                                    .@"[[LinkKind]]" = "ImportedBinding",
+                                    .@"[[ImportedBindingValue]]" = ModuleExportNameCopy,
                                 });
                             } else {
-                                try state.linkage_symbol_table.put(ModuleExportNameCopy, .{
-                                    .kind = "ModuleExportName",
-                                    .binding_source = "",
+                                try state.symbol_table.put(ModuleExportNameCopy, .{
+                                    .@"[[LinkKind]]" = "ModuleExportName",
+                                    .@"[[ImportedBindingValue]]" = "",
                                 });
-                                std.debug.print("   📥📥📥📥 {s}\n", .{
-                                    ModuleExportName,
-                                });
+                                std.debug.print("   📥📥📥📥 {s}\n", .{ModuleExportName});
                             }
                             cursor_NamedImports = stripWhitespace(NamedImports.items, cursor_NamedImports);
                             if (peek(code, cursor_NamedImports, ",")) {
@@ -181,6 +193,7 @@ pub fn linkModules(allocator: std.mem.Allocator, entries: *[1]Module) !void {
                                                 const char = module_code[module_cursor];
 
                                                 if (in_string) {
+                                                    // in_string condition
                                                     if (char == string_char and module_code[module_cursor - 1] != '\\') {
                                                         in_string = false;
                                                     }
@@ -189,6 +202,7 @@ pub fn linkModules(allocator: std.mem.Allocator, entries: *[1]Module) !void {
                                                         in_string = true;
                                                         string_char = char;
                                                     } else if (char == '{') {
+                                                        // strip FunctionBody
                                                         brace_count += 1;
                                                     } else if (char == '}') {
                                                         if (brace_count == 0) {
@@ -210,9 +224,9 @@ pub fn linkModules(allocator: std.mem.Allocator, entries: *[1]Module) !void {
                                                 }
                                             };
                                             const func_name_slice = state.imported_module_code_export_symbols.items[func_name_slice_start..];
-                                            try state.linkage_symbol_table.put(func_name_slice, .{
-                                                .kind = "FunctionDeclaration",
-                                                .binding_source = "",
+                                            try state.symbol_table.put(func_name_slice, .{
+                                                .@"[[LinkKind]]" = "FunctionDeclaration",
+                                                .@"[[ImportedBindingValue]]" = "",
                                             });
                                         }
                                     }
@@ -240,15 +254,15 @@ pub fn linkModules(allocator: std.mem.Allocator, entries: *[1]Module) !void {
         }
 
         // write binding code by exported FunctionDeclaration
-        var iter = state.linkage_symbol_table.iterator();
+        var iter = state.symbol_table.iterator();
         while (iter.next()) |entry| {
-            std.debug.print("   🔗🔗🔗 {s} ({s}) from {s}\n", .{ entry.key_ptr.*, entry.value_ptr.kind, entry.value_ptr.binding_source });
-            if (std.mem.eql(u8, entry.value_ptr.kind, "ImportedBinding")) {
+            std.debug.print("   🔗🔗🔗 {s} ({s}) from {s}\n", .{ entry.key_ptr.*, entry.value_ptr.@"[[LinkKind]]", entry.value_ptr.@"[[ImportedBindingValue]]" });
+            if (std.mem.eql(u8, entry.value_ptr.@"[[LinkKind]]", "ImportedBinding")) {
                 try state.output.appendSlice(state.allocator, "\n// Define an immutable ImportedBinding here");
                 try state.output.appendSlice(state.allocator, "\nconst ");
                 try state.output.appendSlice(state.allocator, entry.key_ptr.*);
                 try state.output.appendSlice(state.allocator, " = ");
-                try state.output.appendSlice(state.allocator, entry.value_ptr.binding_source);
+                try state.output.appendSlice(state.allocator, entry.value_ptr.@"[[ImportedBindingValue]]");
                 try state.output.appendSlice(state.allocator, ";\n");
             }
         }
