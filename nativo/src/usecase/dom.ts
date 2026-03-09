@@ -1,3 +1,7 @@
+import { naming } from './base.ts';
+
+console.log(naming);
+
 export function removeChildFromBody(dom: HTMLElement) {
     document.body.removeChild(dom);
 }

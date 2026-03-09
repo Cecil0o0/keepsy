@@ -4,7 +4,33 @@ const std = @import("std");
 pub const ModuleLinker = @This();
 
 pub const Module = struct {
+    // Module Location = resolve(specifier, parent_path)
     specifier: []const u8,
+    parent_path: []const u8,
+    resolved_path: ?[]const u8 = null,
+    raw_code: ?[]const u8 = "",
+};
+
+const Node = struct {
+    childLeftNodes: std.ArrayList(Node),
+    childRightNodes: std.ArrayList(Node),
+    module: Module,
+    allocator: std.mem.Allocator,
+
+    fn init(allocator: std.mem.Allocator, module: Module) !Node {
+        return Node{
+            .childLeftNodes = try std.ArrayList(Node).initCapacity(allocator, 1024),
+            .childRightNodes = try std.ArrayList(Node).initCapacity(allocator, 1024),
+            .module = module,
+            .allocator = allocator,
+        };
+    }
+
+    fn deinit(self: *Node) void {
+        self.childLeftNodes.deinit(self.allocator);
+        self.childRightNodes.deinit(self.allocator);
+        if (self.module.raw_code) |code| self.allocator.free(code);
+    }
 };
 
 /// In computer science, a symbol is an identifier used by Linker to manage and resolve references between separately compiled modules of code.
@@ -68,7 +94,7 @@ pub fn linkModules(allocator: std.mem.Allocator, entries: *[1]Module) !void {
     for (entries) |module| {
         var buf: [1024]u8 = undefined;
         var buf_parent: [1024]u8 = undefined;
-        const path = try resolve(&buf, module.specifier, try std.fs.realpath("./module-linker.zig", &buf_parent));
+        const path = try resolve(&buf, module.specifier, try std.fs.realpath(module.parent_path, &buf_parent));
         const code = try std.fs.cwd().readFileAlloc(state.allocator, path, std.math.maxInt(usize));
         defer state.allocator.free(code);
 
@@ -279,6 +305,60 @@ pub fn linkModules(allocator: std.mem.Allocator, entries: *[1]Module) !void {
     }
 }
 
+fn buildModuleTree(allocator: std.mem.Allocator, module: Module) !Node {
+    var node = try Node.init(allocator, module);
+    const code = module.raw_code.?;
+
+    var cursor: usize = 0;
+    while (cursor < code.len) {
+        cursor = stripWhitespaceAndComments(code, cursor);
+        if (peek(code, cursor, "import")) {
+            cursor += 6;
+            cursor = stripWhitespace(code, cursor);
+            // Althrough there is no need for now to consume the `ImportClause` cause I just want to find the `from` keyword for `FromClause`.
+            // but I should consume it to make the syntax correct
+            while (cursor < code.len) {
+                cursor += 1;
+                if (peek(code, cursor, "from")) break;
+            }
+            if (peek(code, cursor, "from")) {
+                cursor += 4;
+                cursor = stripWhitespace(code, cursor);
+                // try to consume the string literal for path
+                // only need to consider single quote cause the purpose of education
+                if (peek(code, cursor, "'")) {
+                    cursor += 1;
+                }
+                var string_literal_cursor = cursor;
+                while (code[string_literal_cursor] != '\'') {
+                    string_literal_cursor += 1;
+                }
+                const dependency_module_specifier = code[cursor..string_literal_cursor];
+                // '\'' and ';'
+                cursor = string_literal_cursor + 2;
+                try node.childLeftNodes.append(allocator, try buildModuleTree(allocator, Module{
+                    .specifier = dependency_module_specifier,
+                    .parent_path = module.resolved_path.?,
+                }));
+            }
+        } else {
+            // peek and pass the `ImportDeclaration`, or else I will break the while loop
+            break;
+        }
+    }
+    return node;
+}
+
+fn postOrderTraverse(node: *Node, visit: fn (node: *Node) void) void {
+    for (0..node.childLeftNodes.items.len) |i| {
+        postOrderTraverse(&node.childLeftNodes.items[i], visit);
+    }
+    for (0..node.childRightNodes.items.len) |i| {
+        postOrderTraverse(&node.childRightNodes.items[i], visit);
+    }
+    visit(node);
+}
+
 fn resolve(buf: []u8, specifier: []const u8, parent: []const u8) ![]const u8 {
     if (std.mem.startsWith(u8, specifier, "./") or std.mem.startsWith(u8, specifier, "../")) {
         var parent_count: u8 = 0;
@@ -366,7 +446,23 @@ fn stripWhitespaceAndComments(code: []const u8, cursor: usize) usize {
     return i;
 }
 
-test "link modules" {
-    var entries = [_]Module{Module{ .specifier = "./usecase/main.ts" }};
+test "module_linkage" {
+    var entries = [_]Module{Module{ .specifier = "./usecase/main.ts", .parent_path = "./module-linker.zig" }};
     _ = try linkModules(std.testing.allocator, &entries);
+}
+
+fn printNode(node: *Node) void {
+    std.debug.print("Node module: {s}\n", .{node.module.specifier});
+}
+fn freeNode(node: *Node) void {
+    node.deinit();
+}
+test "module_linkage_tree" {
+    var module = Module{ .specifier = "./usecase/main.ts", .parent_path = "./module-linker.zig" };
+    var buf: [1024]u8 = undefined;
+    module.resolved_path = try resolve(&buf, module.specifier, module.parent_path);
+    module.raw_code = try std.fs.cwd().readFileAlloc(std.testing.allocator, module.resolved_path.?, std.math.maxInt(usize));
+    var node = try buildModuleTree(std.testing.allocator, module);
+    postOrderTraverse(&node, printNode);
+    defer postOrderTraverse(&node, freeNode);
 }
