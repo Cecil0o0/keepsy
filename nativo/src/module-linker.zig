@@ -16,19 +16,22 @@ const Node = struct {
     childRightNodes: std.ArrayList(Node),
     module: Module,
     allocator: std.mem.Allocator,
+    state: *State,
 
-    fn init(allocator: std.mem.Allocator, module: Module) !Node {
+    fn init(allocator: std.mem.Allocator, state: *State, module: Module) !Node {
         return Node{
             .childLeftNodes = try std.ArrayList(Node).initCapacity(allocator, 1024),
             .childRightNodes = try std.ArrayList(Node).initCapacity(allocator, 1024),
             .module = module,
             .allocator = allocator,
+            .state = state,
         };
     }
 
     fn deinit(self: *Node) void {
         self.childLeftNodes.deinit(self.allocator);
         self.childRightNodes.deinit(self.allocator);
+        if (self.module.resolved_path) |path| self.allocator.free(path);
         if (self.module.raw_code) |code| self.allocator.free(code);
     }
 };
@@ -92,208 +95,26 @@ pub fn linkModules(allocator: std.mem.Allocator, entries: *[1]Module) !void {
     defer state.deinit();
 
     for (entries) |module| {
-        var buf: [1024]u8 = undefined;
         var buf_parent: [1024]u8 = undefined;
-        const path = try resolve(&buf, module.specifier, try std.fs.realpath(module.parent_path, &buf_parent));
+        const path = try resolve(allocator, module.specifier, try std.fs.realpath(module.parent_path, &buf_parent));
         const code = try std.fs.cwd().readFileAlloc(state.allocator, path, std.math.maxInt(usize));
-        defer state.allocator.free(code);
+        // code will be freed by tree cleanup via freeNode
 
-        var cursor: usize = 0;
-        var end_of_linking_cursor: usize = 0;
-        cursor = stripWhitespace(code, cursor);
-        while (cursor < code.len) {
-            if (peek(code, cursor, "import")) {
-                cursor += 6;
-                // try to parse importDeclaration
-                cursor = stripWhitespace(code, cursor);
-                if (peek(code, cursor, "{")) {
-                    cursor += 1;
-                    cursor = stripWhitespace(code, cursor);
-                    // try toconsume NamedImports in ImportClause
-                    var buf_NamedImports: [512]u8 = undefined;
-                    var NamedImports = std.ArrayList(u8).initBuffer(&buf_NamedImports);
-                    while (cursor < code.len and code[cursor] != '}') {
-                        NamedImports.append(state.allocator, code[cursor]) catch |err| {
-                            switch (err) {
-                                error.OutOfMemory => return error.syntaxError,
-                                else => return err,
-                            }
-                        };
-                        cursor += 1;
-                    }
-                    cursor += 1;
-                    std.debug.print("   📥 imports {{ {s} }}\n", .{NamedImports.items});
-                    // support ModuleExportName as ImportedBinding
-                    // In this case: import { a as b }, a is ModuleExportName whereas b is ImportedBinding
-                    // reference: https://tc39.es/ecma262/#prod-ImportedBinding
+        // Build module tree using buildModuleTree
+        const root_module = Module{
+            .specifier = module.specifier,
+            .parent_path = module.parent_path,
+            .resolved_path = path,
+            .raw_code = code,
+        };
+        var root_node = try buildModuleTree(allocator, &state, root_module);
+        defer postOrderTraverse(&root_node, free_node) catch |err| {
+            std.debug.print("Error when freeing node: {any}\n", .{err});
+        };
 
-                    var cursor_NamedImports: usize = 0;
-                    cursor_NamedImports = stripWhitespace(NamedImports.items, cursor_NamedImports);
-                    while (cursor_NamedImports < NamedImports.items.len) {
-                        if (peekIdentifier(NamedImports.items, cursor_NamedImports)) {
-                            const ModuleExportName = consumeIdentifier(NamedImports.items, &cursor_NamedImports);
-                            const ModuleExportNameCopy = try state.allocator.dupe(u8, ModuleExportName);
-                            cursor_NamedImports = stripWhitespace(NamedImports.items, cursor_NamedImports);
-                            if (peek(NamedImports.items, cursor_NamedImports, "as")) {
-                                cursor_NamedImports += 2;
-                                cursor_NamedImports = stripWhitespace(NamedImports.items, cursor_NamedImports);
-                                // cosume an identifier
-                                const ImportedBinding = consumeIdentifier(NamedImports.items, &cursor_NamedImports);
-                                const ImportedBindingCopy = try state.allocator.dupe(u8, ImportedBinding);
-                                try state.symbol_table.put(ImportedBindingCopy, .{
-                                    .@"[[LinkKind]]" = "ImportedBinding",
-                                    .@"[[ImportedBindingValue]]" = ModuleExportNameCopy,
-                                });
-                            } else {
-                                try state.symbol_table.put(ModuleExportNameCopy, .{
-                                    .@"[[LinkKind]]" = "ModuleExportName",
-                                    .@"[[ImportedBindingValue]]" = "",
-                                });
-                                std.debug.print("   📥📥📥📥 {s}\n", .{ModuleExportName});
-                            }
-                            cursor_NamedImports = stripWhitespace(NamedImports.items, cursor_NamedImports);
-                            if (peek(code, cursor_NamedImports, ",")) {
-                                cursor_NamedImports += 1;
-                                cursor_NamedImports = stripWhitespace(NamedImports.items, cursor_NamedImports);
-                                continue;
-                            }
-                        }
-                        cursor_NamedImports += 1;
-                    }
+        // Traverse tree in post-order to process dependencies before dependents
+        try postOrderTraverse(&root_node, visit_node);
 
-                    // try to parse FromClause
-                    cursor = stripWhitespace(code, cursor);
-                    if (peek(code, cursor, "from")) {
-                        cursor += 4;
-                        // try to parse ModuleSpecifier in FromClause
-                        cursor = stripWhitespace(code, cursor);
-                        if (peek(code, cursor, "'")) {
-                            cursor += 1;
-                            var buf_ModuleSpecifier: [64]u8 = undefined;
-                            var ModuleSpecifier = std.ArrayList(u8).initBuffer(&buf_ModuleSpecifier);
-                            while (cursor < code.len and code[cursor] != '\'') {
-                                ModuleSpecifier.append(state.allocator, code[cursor]) catch |err| {
-                                    switch (err) {
-                                        std.mem.Allocator.Error.OutOfMemory => return error.syntaxError,
-                                        else => return err,
-                                    }
-                                };
-                                cursor += 1;
-                            }
-                            cursor += 1;
-                            if (state.linked_modules.contains(ModuleSpecifier.items)) {
-                                // same module already linked, don't link again.
-                            } else {
-                                try state.linked_modules.put(ModuleSpecifier.items, true);
-                                var buf_path_to_file: [1024]u8 = undefined;
-                                const path_to_file = try resolve(&buf_path_to_file, ModuleSpecifier.items, path);
-                                const module_code = try std.fs.cwd().readFileAlloc(state.allocator, path_to_file, std.math.maxInt(usize));
-                                defer allocator.free(module_code);
-                                // parse ExportDeclaration
-                                // parse Declaration
-                                // parse HoistableDeclaration
-                                // parse FunctionDeclaration
-                                // reference: https://tc39.es/ecma262/#prod-ExportSpecifier
-                                var module_cursor: usize = 0;
-                                module_cursor = stripWhitespaceAndComments(module_code, module_cursor);
-
-                                while (module_cursor < module_code.len) {
-                                    if (peek(module_code, module_cursor, "export")) {
-                                        module_cursor += 6;
-                                        module_cursor = stripWhitespaceAndComments(module_code, module_cursor);
-
-                                        if (peek(module_code, module_cursor, "function")) {
-                                            module_cursor += 8;
-                                            module_cursor = stripWhitespaceAndComments(module_code, module_cursor);
-
-                                            // consume function name
-                                            const func_name = consumeIdentifier(module_code, &module_cursor);
-                                            std.debug.print("   ✨ export function {s}\n", .{func_name});
-
-                                            // Find the end of the function declaration
-                                            var brace_count: usize = 0;
-                                            var in_string: bool = false;
-                                            var string_char: u8 = 0;
-
-                                            while (module_cursor < module_code.len) {
-                                                const char = module_code[module_cursor];
-
-                                                if (in_string) {
-                                                    // in_string condition
-                                                    if (char == string_char and module_code[module_cursor - 1] != '\\') {
-                                                        in_string = false;
-                                                    }
-                                                } else {
-                                                    if (char == '"' or char == '\'') {
-                                                        in_string = true;
-                                                        string_char = char;
-                                                    } else if (char == '{') {
-                                                        // strip FunctionBody
-                                                        brace_count += 1;
-                                                    } else if (char == '}') {
-                                                        if (brace_count == 0) {
-                                                            // We've reached the end of the function body
-                                                            break;
-                                                        }
-                                                        brace_count -= 1;
-                                                    }
-                                                }
-                                                module_cursor += 1;
-                                            }
-
-                                            // Add function to symbol table
-                                            const func_name_slice_start = state.imported_module_code_export_symbols.items.len;
-                                            state.imported_module_code_export_symbols.appendSlice(state.allocator, func_name) catch |err| {
-                                                switch (err) {
-                                                    std.mem.Allocator.Error.OutOfMemory => return error.syntaxError,
-                                                    else => return err,
-                                                }
-                                            };
-                                            const func_name_slice = state.imported_module_code_export_symbols.items[func_name_slice_start..];
-                                            try state.symbol_table.put(func_name_slice, .{
-                                                .@"[[LinkKind]]" = "FunctionDeclaration",
-                                                .@"[[ImportedBindingValue]]" = "",
-                                            });
-                                        }
-                                    }
-
-                                    module_cursor += 1;
-                                }
-                                try state.output.appendSlice(state.allocator, module_code);
-                            }
-                            continue;
-                        }
-                    }
-                    cursor = stripWhitespace(code, cursor);
-                }
-            }
-
-            if (peek(code, cursor, ";")) {
-                cursor += 1;
-                cursor = stripWhitespaceAndComments(code, cursor);
-                if (!peek(code, cursor, "import")) {
-                    end_of_linking_cursor = cursor;
-                    break;
-                } else continue;
-            }
-            cursor += 1;
-        }
-
-        // write binding code by exported FunctionDeclaration
-        var iter = state.symbol_table.iterator();
-        while (iter.next()) |entry| {
-            std.debug.print("   🔗🔗🔗 {s} ({s}) from {s}\n", .{ entry.key_ptr.*, entry.value_ptr.@"[[LinkKind]]", entry.value_ptr.@"[[ImportedBindingValue]]" });
-            if (std.mem.eql(u8, entry.value_ptr.@"[[LinkKind]]", "ImportedBinding")) {
-                try state.output.appendSlice(state.allocator, "\n// Define an immutable ImportedBinding here");
-                try state.output.appendSlice(state.allocator, "\nconst ");
-                try state.output.appendSlice(state.allocator, entry.key_ptr.*);
-                try state.output.appendSlice(state.allocator, " = ");
-                try state.output.appendSlice(state.allocator, entry.value_ptr.@"[[ImportedBindingValue]]");
-                try state.output.appendSlice(state.allocator, ";\n");
-            }
-        }
-
-        try state.output.appendSlice(state.allocator, code[end_of_linking_cursor..]);
         std.fs.cwd().access("dist", .{ .mode = .read_write }) catch |err| {
             if (err == error.FileNotFound) {
                 try std.fs.cwd().makeDir("dist");
@@ -305,12 +126,225 @@ pub fn linkModules(allocator: std.mem.Allocator, entries: *[1]Module) !void {
     }
 }
 
-fn buildModuleTree(allocator: std.mem.Allocator, module: Module) !Node {
-    var node = try Node.init(allocator, module);
+fn visit_node(node: *Node) !void {
+    std.debug.print("   🌲 Processing module: {s}\n", .{node.module.specifier});
+    const module = node.module;
+    const state = node.state;
+    const code = module.raw_code.?;
+    var cursor: usize = 0;
+    var end_of_linking_cursor: usize = 0;
+    cursor = stripWhitespace(code, cursor);
+    end_of_linking_cursor = cursor;
+    while (cursor < code.len) {
+        if (code[cursor] != 'i') {
+            break;
+        }
+
+        if (peek(code, cursor, "import")) {
+            cursor += 6;
+            // try to parse importDeclaration
+            cursor = stripWhitespace(code, cursor);
+            if (peek(code, cursor, "{")) {
+                cursor += 1;
+                cursor = stripWhitespace(code, cursor);
+                // try toconsume NamedImports in ImportClause
+                var buf_NamedImports: [512]u8 = undefined;
+                var NamedImports = std.ArrayList(u8).initBuffer(&buf_NamedImports);
+                while (cursor < code.len and code[cursor] != '}') {
+                    NamedImports.append(state.allocator, code[cursor]) catch |err| {
+                        switch (err) {
+                            error.OutOfMemory => return error.syntaxError,
+                            else => return err,
+                        }
+                    };
+                    cursor += 1;
+                }
+                cursor += 1;
+                std.debug.print("   📥 imports {{ {s} }}\n", .{NamedImports.items});
+                // support ModuleExportName as ImportedBinding
+                // In this case: import { a as b }, a is ModuleExportName whereas b is ImportedBinding
+                // reference: https://tc39.es/ecma262/#prod-ImportedBinding
+
+                var cursor_NamedImports: usize = 0;
+                cursor_NamedImports = stripWhitespace(NamedImports.items, cursor_NamedImports);
+                while (cursor_NamedImports < NamedImports.items.len) {
+                    if (peekIdentifier(NamedImports.items, cursor_NamedImports)) {
+                        const ModuleExportName = consumeIdentifier(NamedImports.items, &cursor_NamedImports);
+                        const ModuleExportNameCopy = try state.allocator.dupe(u8, ModuleExportName);
+                        cursor_NamedImports = stripWhitespace(NamedImports.items, cursor_NamedImports);
+                        if (peek(NamedImports.items, cursor_NamedImports, "as")) {
+                            cursor_NamedImports += 2;
+                            cursor_NamedImports = stripWhitespace(NamedImports.items, cursor_NamedImports);
+                            // cosume an identifier
+                            const ImportedBinding = consumeIdentifier(NamedImports.items, &cursor_NamedImports);
+                            const ImportedBindingCopy = try state.allocator.dupe(u8, ImportedBinding);
+                            try state.symbol_table.put(ImportedBindingCopy, .{
+                                .@"[[LinkKind]]" = "ImportedBinding",
+                                .@"[[ImportedBindingValue]]" = ModuleExportNameCopy,
+                            });
+                        } else {
+                            try state.symbol_table.put(ModuleExportNameCopy, .{
+                                .@"[[LinkKind]]" = "ModuleExportName",
+                                .@"[[ImportedBindingValue]]" = "",
+                            });
+                            std.debug.print("   📥📥📥📥 {s}\n", .{ModuleExportName});
+                        }
+                        cursor_NamedImports = stripWhitespace(NamedImports.items, cursor_NamedImports);
+                        if (peek(code, cursor_NamedImports, ",")) {
+                            cursor_NamedImports += 1;
+                            cursor_NamedImports = stripWhitespace(NamedImports.items, cursor_NamedImports);
+                            continue;
+                        }
+                    }
+                    cursor_NamedImports += 1;
+                }
+
+                // try to parse FromClause
+                cursor = stripWhitespace(code, cursor);
+                if (peek(code, cursor, "from")) {
+                    cursor += 4;
+                    // try to parse ModuleSpecifier in FromClause
+                    cursor = stripWhitespace(code, cursor);
+                    if (peek(code, cursor, "'")) {
+                        cursor += 1;
+                        var buf_ModuleSpecifier: [64]u8 = undefined;
+                        var ModuleSpecifier = std.ArrayList(u8).initBuffer(&buf_ModuleSpecifier);
+                        while (cursor < code.len and code[cursor] != '\'') {
+                            ModuleSpecifier.append(state.allocator, code[cursor]) catch |err| {
+                                switch (err) {
+                                    std.mem.Allocator.Error.OutOfMemory => return error.syntaxError,
+                                    else => return err,
+                                }
+                            };
+                            cursor += 1;
+                        }
+                        cursor += 1;
+                        if (state.linked_modules.contains(ModuleSpecifier.items)) {
+                            // same module already linked, don't link again.
+                        } else {
+                            try state.linked_modules.put(ModuleSpecifier.items, true);
+                            const path_to_file = try resolve(node.allocator, ModuleSpecifier.items, module.resolved_path.?);
+                            defer node.allocator.free(path_to_file);
+                            const module_code = try std.fs.cwd().readFileAlloc(state.allocator, path_to_file, std.math.maxInt(usize));
+                            defer node.allocator.free(module_code);
+                            // parse ExportDeclaration
+                            // parse Declaration
+                            // parse HoistableDeclaration
+                            // parse FunctionDeclaration
+                            // reference: https://tc39.es/ecma262/#prod-ExportSpecifier
+                            var module_cursor: usize = 0;
+                            module_cursor = stripWhitespaceAndComments(module_code, module_cursor);
+
+                            while (module_cursor < module_code.len) {
+                                if (peek(module_code, module_cursor, "export")) {
+                                    module_cursor += 6;
+                                    module_cursor = stripWhitespaceAndComments(module_code, module_cursor);
+
+                                    if (peek(module_code, module_cursor, "function")) {
+                                        module_cursor += 8;
+                                        module_cursor = stripWhitespaceAndComments(module_code, module_cursor);
+
+                                        // consume function name
+                                        const func_name = consumeIdentifier(module_code, &module_cursor);
+                                        std.debug.print("   ✨ export function {s}\n", .{func_name});
+
+                                        // Find the end of the function declaration
+                                        var brace_count: usize = 0;
+                                        var in_string: bool = false;
+                                        var string_char: u8 = 0;
+
+                                        while (module_cursor < module_code.len) {
+                                            const char = module_code[module_cursor];
+
+                                            if (in_string) {
+                                                // in_string condition
+                                                if (char == string_char and module_code[module_cursor - 1] != '\\') {
+                                                    in_string = false;
+                                                }
+                                            } else {
+                                                if (char == '"' or char == '\'') {
+                                                    in_string = true;
+                                                    string_char = char;
+                                                } else if (char == '{') {
+                                                    // strip FunctionBody
+                                                    brace_count += 1;
+                                                } else if (char == '}') {
+                                                    if (brace_count == 0) {
+                                                        // We've reached the end of the function body
+                                                        break;
+                                                    }
+                                                    brace_count -= 1;
+                                                }
+                                            }
+                                            module_cursor += 1;
+                                        }
+
+                                        // Add function to symbol table
+                                        const func_name_slice_start = state.imported_module_code_export_symbols.items.len;
+                                        state.imported_module_code_export_symbols.appendSlice(state.allocator, func_name) catch |err| {
+                                            switch (err) {
+                                                std.mem.Allocator.Error.OutOfMemory => return error.syntaxError,
+                                                else => return err,
+                                            }
+                                        };
+                                        const func_name_slice = state.imported_module_code_export_symbols.items[func_name_slice_start..];
+                                        try state.symbol_table.put(func_name_slice, .{
+                                            .@"[[LinkKind]]" = "FunctionDeclaration",
+                                            .@"[[ImportedBindingValue]]" = "",
+                                        });
+                                    }
+                                }
+
+                                module_cursor += 1;
+                            }
+                            try state.output.appendSlice(state.allocator, module_code);
+                        }
+                        continue;
+                    }
+                }
+                cursor = stripWhitespace(code, cursor);
+            }
+        }
+
+        if (peek(code, cursor, ";")) {
+            cursor += 1;
+            cursor = stripWhitespaceAndComments(code, cursor);
+            if (!peek(code, cursor, "import")) {
+                end_of_linking_cursor = cursor;
+                break;
+            } else continue;
+        }
+        cursor += 1;
+    }
+
+    // write binding code by exported FunctionDeclaration
+    var iter = state.symbol_table.iterator();
+    var linked_code = try std.ArrayList(u8).initCapacity(node.allocator, 1024 * 1024);
+    defer linked_code.deinit(node.allocator);
+    while (iter.next()) |entry| {
+        std.debug.print("   🔗🔗🔗 {s} ({s}) from {s}\n", .{ entry.key_ptr.*, entry.value_ptr.@"[[LinkKind]]", entry.value_ptr.@"[[ImportedBindingValue]]" });
+        if (std.mem.eql(u8, entry.value_ptr.@"[[LinkKind]]", "ImportedBinding")) {
+            try linked_code.appendSlice(state.allocator, "\n// Define an immutable ImportedBinding here");
+            try linked_code.appendSlice(state.allocator, "\nconst ");
+            try linked_code.appendSlice(state.allocator, entry.key_ptr.*);
+            try linked_code.appendSlice(state.allocator, " = ");
+            try linked_code.appendSlice(state.allocator, entry.value_ptr.@"[[ImportedBindingValue]]");
+            try linked_code.appendSlice(state.allocator, ";\n");
+        }
+    }
+
+    std.debug.print("from cursor: {s}", .{code[cursor..]});
+    try linked_code.appendSlice(node.allocator, code[end_of_linking_cursor..]);
+    std.debug.print("\n\n\n{s}\n\n\n", .{linked_code.items});
+    try state.output.appendSlice(node.allocator, linked_code.items);
+}
+
+fn buildModuleTree(allocator: std.mem.Allocator, state: *State, module: Module) !Node {
+    var node = try Node.init(allocator, state, module);
     const code = module.raw_code.?;
 
     var cursor: usize = 0;
-    while (cursor < code.len) {
+    pass_import: while (cursor < code.len) {
         cursor = stripWhitespaceAndComments(code, cursor);
         if (peek(code, cursor, "import")) {
             cursor += 6;
@@ -336,10 +370,21 @@ fn buildModuleTree(allocator: std.mem.Allocator, module: Module) !Node {
                 const dependency_module_specifier = code[cursor..string_literal_cursor];
                 // '\'' and ';'
                 cursor = string_literal_cursor + 2;
-                try node.childLeftNodes.append(allocator, try buildModuleTree(allocator, Module{
+                const resolved_path = try resolve(allocator, dependency_module_specifier, module.resolved_path.?);
+                // if a node with the same `resolved_path` already exists, reuse it
+                for (node.childLeftNodes.items) |child_node| {
+                    if (std.mem.eql(u8, child_node.module.resolved_path.?, resolved_path)) {
+                        allocator.free(resolved_path);
+                        continue :pass_import;
+                    }
+                }
+                const dependency_module = Module{
                     .specifier = dependency_module_specifier,
                     .parent_path = module.resolved_path.?,
-                }));
+                    .resolved_path = resolved_path,
+                    .raw_code = try std.fs.cwd().readFileAlloc(allocator, resolved_path, std.math.maxInt(usize)),
+                };
+                try node.childLeftNodes.append(allocator, try buildModuleTree(allocator, state, dependency_module));
             }
         } else {
             // peek and pass the `ImportDeclaration`, or else I will break the while loop
@@ -349,17 +394,17 @@ fn buildModuleTree(allocator: std.mem.Allocator, module: Module) !Node {
     return node;
 }
 
-fn postOrderTraverse(node: *Node, visit: fn (node: *Node) void) void {
+fn postOrderTraverse(node: *Node, visit: fn (node: *Node) anyerror!void) !void {
     for (0..node.childLeftNodes.items.len) |i| {
-        postOrderTraverse(&node.childLeftNodes.items[i], visit);
+        try postOrderTraverse(&node.childLeftNodes.items[i], visit);
     }
     for (0..node.childRightNodes.items.len) |i| {
-        postOrderTraverse(&node.childRightNodes.items[i], visit);
+        try postOrderTraverse(&node.childRightNodes.items[i], visit);
     }
-    visit(node);
+    try visit(node);
 }
 
-fn resolve(buf: []u8, specifier: []const u8, parent: []const u8) ![]const u8 {
+fn resolve(allocator: std.mem.Allocator, specifier: []const u8, parent: []const u8) ![]const u8 {
     if (std.mem.startsWith(u8, specifier, "./") or std.mem.startsWith(u8, specifier, "../")) {
         var parent_count: u8 = 0;
         var cursor_specifier: u8 = 0;
@@ -383,11 +428,11 @@ fn resolve(buf: []u8, specifier: []const u8, parent: []const u8) ![]const u8 {
                 i -= 1;
             }
         }
-        var resolved = std.ArrayList(u8).initBuffer(buf);
+        var resolved = try std.ArrayList(u8).initCapacity(allocator, 1024);
         try resolved.appendSliceBounded(dirname[0..i]);
         try resolved.appendBounded('/');
         try resolved.appendSliceBounded(specifier[cursor_specifier..]);
-        return resolved.items;
+        return resolved.toOwnedSlice(allocator);
     }
     return specifier;
 }
@@ -451,18 +496,19 @@ test "module_linkage" {
     _ = try linkModules(std.testing.allocator, &entries);
 }
 
-fn printNode(node: *Node) void {
+fn printNode(node: *Node) !void {
     std.debug.print("Node module: {s}\n", .{node.module.specifier});
 }
-fn freeNode(node: *Node) void {
+fn free_node(node: *Node) !void {
     node.deinit();
 }
-test "module_linkage_tree" {
+test "build_module_tree" {
     var module = Module{ .specifier = "./usecase/main.ts", .parent_path = "./module-linker.zig" };
-    var buf: [1024]u8 = undefined;
-    module.resolved_path = try resolve(&buf, module.specifier, module.parent_path);
+    module.resolved_path = try resolve(std.testing.allocator, module.specifier, module.parent_path);
     module.raw_code = try std.fs.cwd().readFileAlloc(std.testing.allocator, module.resolved_path.?, std.math.maxInt(usize));
-    var node = try buildModuleTree(std.testing.allocator, module);
-    postOrderTraverse(&node, printNode);
-    defer postOrderTraverse(&node, freeNode);
+    var state = try State.init(std.testing.allocator);
+    defer state.deinit();
+    var node = try buildModuleTree(std.testing.allocator, &state, module);
+    try postOrderTraverse(&node, printNode);
+    defer postOrderTraverse(&node, free_node) catch unreachable;
 }
