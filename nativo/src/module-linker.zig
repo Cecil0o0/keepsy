@@ -90,7 +90,7 @@ pub const State = struct {
 // this function receives an array of modules as entries, to start with them and parse all import statements and link them all together into one big module.
 // It returns multiple string with all the code linked together for every entries, maybe a css module or a js module.
 // It supports to stripe typescript syntax, so module could contains typescript code.
-pub fn linkModules(allocator: std.mem.Allocator, entries: *[1]Module) !void {
+pub fn link_modules(allocator: std.mem.Allocator, entries: *[1]Module) !void {
     var state = try State.init(allocator);
     defer state.deinit();
 
@@ -107,13 +107,13 @@ pub fn linkModules(allocator: std.mem.Allocator, entries: *[1]Module) !void {
             .resolved_path = path,
             .raw_code = code,
         };
-        var root_node = try buildModuleTree(allocator, &state, root_module);
-        defer postOrderTraverse(&root_node, free_node) catch |err| {
+        var root_node = try build_module_tree(allocator, &state, root_module);
+        defer post_order_traverse(&root_node, free_node) catch |err| {
             std.debug.print("Error when freeing node: {any}\n", .{err});
         };
 
         // Traverse tree in post-order to process dependencies before dependents
-        try postOrderTraverse(&root_node, visit_node);
+        try post_order_traverse(&root_node, visit_node);
 
         std.fs.cwd().access("dist", .{ .mode = .read_write }) catch |err| {
             if (err == error.FileNotFound) {
@@ -133,20 +133,17 @@ fn visit_node(node: *Node) !void {
     const code = module.raw_code.?;
     var cursor: usize = 0;
     var end_of_linking_cursor: usize = 0;
-    cursor = stripWhitespace(code, cursor);
+    cursor = strip_whitespace(code, cursor);
     end_of_linking_cursor = cursor;
     while (cursor < code.len) {
-        if (code[cursor] != 'i') {
-            break;
-        }
-
         if (peek(code, cursor, "import")) {
+            // start to link
             cursor += 6;
             // try to parse importDeclaration
-            cursor = stripWhitespace(code, cursor);
+            cursor = strip_whitespace(code, cursor);
             if (peek(code, cursor, "{")) {
                 cursor += 1;
-                cursor = stripWhitespace(code, cursor);
+                cursor = strip_whitespace(code, cursor);
                 // try toconsume NamedImports in ImportClause
                 var buf_NamedImports: [512]u8 = undefined;
                 var NamedImports = std.ArrayList(u8).initBuffer(&buf_NamedImports);
@@ -166,17 +163,17 @@ fn visit_node(node: *Node) !void {
                 // reference: https://tc39.es/ecma262/#prod-ImportedBinding
 
                 var cursor_NamedImports: usize = 0;
-                cursor_NamedImports = stripWhitespace(NamedImports.items, cursor_NamedImports);
+                cursor_NamedImports = strip_whitespace(NamedImports.items, cursor_NamedImports);
                 while (cursor_NamedImports < NamedImports.items.len) {
-                    if (peekIdentifier(NamedImports.items, cursor_NamedImports)) {
-                        const ModuleExportName = consumeIdentifier(NamedImports.items, &cursor_NamedImports);
+                    if (peek_identifier(NamedImports.items, cursor_NamedImports)) {
+                        const ModuleExportName = consume_identifier(NamedImports.items, &cursor_NamedImports);
                         const ModuleExportNameCopy = try state.allocator.dupe(u8, ModuleExportName);
-                        cursor_NamedImports = stripWhitespace(NamedImports.items, cursor_NamedImports);
+                        cursor_NamedImports = strip_whitespace(NamedImports.items, cursor_NamedImports);
                         if (peek(NamedImports.items, cursor_NamedImports, "as")) {
                             cursor_NamedImports += 2;
-                            cursor_NamedImports = stripWhitespace(NamedImports.items, cursor_NamedImports);
+                            cursor_NamedImports = strip_whitespace(NamedImports.items, cursor_NamedImports);
                             // cosume an identifier
-                            const ImportedBinding = consumeIdentifier(NamedImports.items, &cursor_NamedImports);
+                            const ImportedBinding = consume_identifier(NamedImports.items, &cursor_NamedImports);
                             const ImportedBindingCopy = try state.allocator.dupe(u8, ImportedBinding);
                             try state.symbol_table.put(ImportedBindingCopy, .{
                                 .@"[[LinkKind]]" = "ImportedBinding",
@@ -189,10 +186,10 @@ fn visit_node(node: *Node) !void {
                             });
                             std.debug.print("   📥📥📥📥 {s}\n", .{ModuleExportName});
                         }
-                        cursor_NamedImports = stripWhitespace(NamedImports.items, cursor_NamedImports);
+                        cursor_NamedImports = strip_whitespace(NamedImports.items, cursor_NamedImports);
                         if (peek(code, cursor_NamedImports, ",")) {
                             cursor_NamedImports += 1;
-                            cursor_NamedImports = stripWhitespace(NamedImports.items, cursor_NamedImports);
+                            cursor_NamedImports = strip_whitespace(NamedImports.items, cursor_NamedImports);
                             continue;
                         }
                     }
@@ -200,16 +197,19 @@ fn visit_node(node: *Node) !void {
                 }
 
                 // try to parse FromClause
-                cursor = stripWhitespace(code, cursor);
+                cursor = strip_whitespace(code, cursor);
                 if (peek(code, cursor, "from")) {
                     cursor += 4;
                     // try to parse ModuleSpecifier in FromClause
-                    cursor = stripWhitespace(code, cursor);
+                    cursor = strip_whitespace(code, cursor);
                     if (peek(code, cursor, "'")) {
                         cursor += 1;
                         var buf_ModuleSpecifier: [64]u8 = undefined;
                         var ModuleSpecifier = std.ArrayList(u8).initBuffer(&buf_ModuleSpecifier);
-                        while (cursor < code.len and code[cursor] != '\'') {
+                        while (cursor < code.len) {
+                            if (code[cursor] == '\'') {
+                                break;
+                            }
                             ModuleSpecifier.append(state.allocator, code[cursor]) catch |err| {
                                 switch (err) {
                                     std.mem.Allocator.Error.OutOfMemory => return error.syntaxError,
@@ -233,19 +233,19 @@ fn visit_node(node: *Node) !void {
                             // parse FunctionDeclaration
                             // reference: https://tc39.es/ecma262/#prod-ExportSpecifier
                             var module_cursor: usize = 0;
-                            module_cursor = stripWhitespaceAndComments(module_code, module_cursor);
+                            module_cursor = strip_whitespace_comments(module_code, module_cursor);
 
                             while (module_cursor < module_code.len) {
                                 if (peek(module_code, module_cursor, "export")) {
                                     module_cursor += 6;
-                                    module_cursor = stripWhitespaceAndComments(module_code, module_cursor);
+                                    module_cursor = strip_whitespace_comments(module_code, module_cursor);
 
                                     if (peek(module_code, module_cursor, "function")) {
                                         module_cursor += 8;
-                                        module_cursor = stripWhitespaceAndComments(module_code, module_cursor);
+                                        module_cursor = strip_whitespace_comments(module_code, module_cursor);
 
                                         // consume function name
-                                        const func_name = consumeIdentifier(module_code, &module_cursor);
+                                        const func_name = consume_identifier(module_code, &module_cursor);
                                         std.debug.print("   ✨ export function {s}\n", .{func_name});
 
                                         // Find the end of the function declaration
@@ -302,17 +302,19 @@ fn visit_node(node: *Node) !void {
                         continue;
                     }
                 }
-                cursor = stripWhitespace(code, cursor);
+                cursor = strip_whitespace(code, cursor);
             }
-        }
-
-        if (peek(code, cursor, ";")) {
+        } else if (peek(code, cursor, ";")) {
+            // end to link
             cursor += 1;
-            cursor = stripWhitespaceAndComments(code, cursor);
+            cursor = strip_whitespace_comments(code, cursor);
             if (!peek(code, cursor, "import")) {
                 end_of_linking_cursor = cursor;
                 break;
             } else continue;
+        } else {
+            // no need to link
+            break;
         }
         cursor += 1;
     }
@@ -332,23 +334,21 @@ fn visit_node(node: *Node) !void {
             try linked_code.appendSlice(state.allocator, ";\n");
         }
     }
-
-    std.debug.print("from cursor: {s}", .{code[cursor..]});
     try linked_code.appendSlice(node.allocator, code[end_of_linking_cursor..]);
     std.debug.print("\n\n\n{s}\n\n\n", .{linked_code.items});
     try state.output.appendSlice(node.allocator, linked_code.items);
 }
 
-fn buildModuleTree(allocator: std.mem.Allocator, state: *State, module: Module) !Node {
+fn build_module_tree(allocator: std.mem.Allocator, state: *State, module: Module) !Node {
     var node = try Node.init(allocator, state, module);
     const code = module.raw_code.?;
 
     var cursor: usize = 0;
     pass_import: while (cursor < code.len) {
-        cursor = stripWhitespaceAndComments(code, cursor);
+        cursor = strip_whitespace_comments(code, cursor);
         if (peek(code, cursor, "import")) {
             cursor += 6;
-            cursor = stripWhitespace(code, cursor);
+            cursor = strip_whitespace(code, cursor);
             // Althrough there is no need for now to consume the `ImportClause` cause I just want to find the `from` keyword for `FromClause`.
             // but I should consume it to make the syntax correct
             while (cursor < code.len) {
@@ -357,7 +357,7 @@ fn buildModuleTree(allocator: std.mem.Allocator, state: *State, module: Module) 
             }
             if (peek(code, cursor, "from")) {
                 cursor += 4;
-                cursor = stripWhitespace(code, cursor);
+                cursor = strip_whitespace(code, cursor);
                 // try to consume the string literal for path
                 // only need to consider single quote cause the purpose of education
                 if (peek(code, cursor, "'")) {
@@ -384,7 +384,7 @@ fn buildModuleTree(allocator: std.mem.Allocator, state: *State, module: Module) 
                     .resolved_path = resolved_path,
                     .raw_code = try std.fs.cwd().readFileAlloc(allocator, resolved_path, std.math.maxInt(usize)),
                 };
-                try node.childLeftNodes.append(allocator, try buildModuleTree(allocator, state, dependency_module));
+                try node.childLeftNodes.append(allocator, try build_module_tree(allocator, state, dependency_module));
             }
         } else {
             // peek and pass the `ImportDeclaration`, or else I will break the while loop
@@ -394,12 +394,12 @@ fn buildModuleTree(allocator: std.mem.Allocator, state: *State, module: Module) 
     return node;
 }
 
-fn postOrderTraverse(node: *Node, visit: fn (node: *Node) anyerror!void) !void {
+fn post_order_traverse(node: *Node, visit: fn (node: *Node) anyerror!void) !void {
     for (0..node.childLeftNodes.items.len) |i| {
-        try postOrderTraverse(&node.childLeftNodes.items[i], visit);
+        try post_order_traverse(&node.childLeftNodes.items[i], visit);
     }
     for (0..node.childRightNodes.items.len) |i| {
-        try postOrderTraverse(&node.childRightNodes.items[i], visit);
+        try post_order_traverse(&node.childRightNodes.items[i], visit);
     }
     try visit(node);
 }
@@ -445,13 +445,13 @@ fn peek(code: []const u8, cursor: usize, pattern: []const u8) bool {
 }
 
 // _aa, a1, A1
-fn peekIdentifier(code: []const u8, cursor: usize) bool {
+fn peek_identifier(code: []const u8, cursor: usize) bool {
     if (cursor + 1 > code.len) return false;
     if (std.ascii.isAlphabetic(code[cursor]) or code[cursor] == '_') return true;
     return false;
 }
 
-fn consumeIdentifier(code: []const u8, cursor: *usize) []const u8 {
+fn consume_identifier(code: []const u8, cursor: *usize) []const u8 {
     const start = cursor.*;
     while (cursor.* < code.len) {
         if (std.ascii.isAlphanumeric(code[cursor.*]) or code[cursor.*] == '_') cursor.* += 1 else break;
@@ -460,7 +460,7 @@ fn consumeIdentifier(code: []const u8, cursor: *usize) []const u8 {
 }
 
 // strip often refers to removing non-essential characters from the source code before parsing begins
-fn stripWhitespace(code: []const u8, cursor: usize) usize {
+fn strip_whitespace(code: []const u8, cursor: usize) usize {
     var i = cursor;
     while (i < code.len) {
         if (std.ascii.isWhitespace(code[i])) i += 1 else break;
@@ -468,7 +468,7 @@ fn stripWhitespace(code: []const u8, cursor: usize) usize {
     return i;
 }
 
-fn stripWhitespaceAndComments(code: []const u8, cursor: usize) usize {
+fn strip_whitespace_comments(code: []const u8, cursor: usize) usize {
     var i = cursor;
     while (i < code.len) {
         if (std.ascii.isWhitespace(code[i])) {
@@ -493,10 +493,10 @@ fn stripWhitespaceAndComments(code: []const u8, cursor: usize) usize {
 
 test "module_linkage" {
     var entries = [_]Module{Module{ .specifier = "./usecase/main.ts", .parent_path = "./module-linker.zig" }};
-    _ = try linkModules(std.testing.allocator, &entries);
+    _ = try link_modules(std.testing.allocator, &entries);
 }
 
-fn printNode(node: *Node) !void {
+fn print_node(node: *Node) !void {
     std.debug.print("Node module: {s}\n", .{node.module.specifier});
 }
 fn free_node(node: *Node) !void {
@@ -508,7 +508,7 @@ test "build_module_tree" {
     module.raw_code = try std.fs.cwd().readFileAlloc(std.testing.allocator, module.resolved_path.?, std.math.maxInt(usize));
     var state = try State.init(std.testing.allocator);
     defer state.deinit();
-    var node = try buildModuleTree(std.testing.allocator, &state, module);
-    try postOrderTraverse(&node, printNode);
-    defer postOrderTraverse(&node, free_node) catch unreachable;
+    var node = try build_module_tree(std.testing.allocator, &state, module);
+    try post_order_traverse(&node, print_node);
+    defer post_order_traverse(&node, free_node) catch unreachable;
 }
