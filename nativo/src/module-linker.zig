@@ -1,4 +1,8 @@
 /// This module is responsible for linking modules which contains code.
+/// case guidance
+/// snake_case if it's a function or variable name
+/// strict follow when the term appears in ecma262, refernce: https://tc39.es/ecma262/#sec-ecmascript-language-scripts-and-modules
+/// else do as you like
 const std = @import("std");
 
 pub const ModuleLinker = @This();
@@ -135,6 +139,14 @@ fn visit_node(node: *Node) !void {
     var end_of_linking_cursor: usize = 0;
     cursor = strip_whitespace(code, cursor);
     end_of_linking_cursor = cursor;
+
+    var linked_code = try std.ArrayList(u8).initCapacity(node.allocator, 1024 * 1024);
+    defer linked_code.deinit(node.allocator);
+    // intermediate code for debugging linkage
+    try linked_code.appendSlice(node.allocator, "\n// ");
+    try linked_code.appendSlice(node.allocator, module.resolved_path.?);
+    try linked_code.appendSlice(node.allocator, "\n\n");
+
     while (cursor < code.len) {
         if (peek(code, cursor, "import")) {
             // start to link
@@ -297,7 +309,6 @@ fn visit_node(node: *Node) !void {
 
                                 module_cursor += 1;
                             }
-                            try state.output.appendSlice(state.allocator, module_code);
                         }
                         continue;
                     }
@@ -318,11 +329,8 @@ fn visit_node(node: *Node) !void {
         }
         cursor += 1;
     }
-
     // write binding code by exported FunctionDeclaration
     var iter = state.symbol_table.iterator();
-    var linked_code = try std.ArrayList(u8).initCapacity(node.allocator, 1024 * 1024);
-    defer linked_code.deinit(node.allocator);
     while (iter.next()) |entry| {
         std.debug.print("   🔗🔗🔗 {s} ({s}) from {s}\n", .{ entry.key_ptr.*, entry.value_ptr.@"[[LinkKind]]", entry.value_ptr.@"[[ImportedBindingValue]]" });
         if (std.mem.eql(u8, entry.value_ptr.@"[[LinkKind]]", "ImportedBinding")) {
@@ -335,7 +343,6 @@ fn visit_node(node: *Node) !void {
         }
     }
     try linked_code.appendSlice(node.allocator, code[end_of_linking_cursor..]);
-    std.debug.print("\n\n\n{s}\n\n\n", .{linked_code.items});
     try state.output.appendSlice(node.allocator, linked_code.items);
 }
 
