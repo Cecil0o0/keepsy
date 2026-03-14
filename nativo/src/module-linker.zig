@@ -342,7 +342,7 @@ fn visit_node(node: *Node) !void {
             try linked_code.appendSlice(state.allocator, ";\n");
         }
     }
-    try linked_code.appendSlice(node.allocator, code[end_of_linking_cursor..]);
+    try linked_code.appendSlice(node.allocator, try strip_typescript(node.allocator, code, end_of_linking_cursor));
     try state.output.appendSlice(node.allocator, linked_code.items);
 }
 
@@ -453,7 +453,8 @@ fn peek(code: []const u8, cursor: usize, pattern: []const u8) bool {
 
 // _aa, a1, A1
 fn peek_identifier(code: []const u8, cursor: usize) bool {
-    if (cursor + 1 > code.len) return false;
+    // check boundary first
+    if (cursor + 1 >= code.len) return false;
     if (std.ascii.isAlphabetic(code[cursor]) or code[cursor] == '_') return true;
     return false;
 }
@@ -463,6 +464,104 @@ fn consume_identifier(code: []const u8, cursor: *usize) []const u8 {
     while (cursor.* < code.len) {
         if (std.ascii.isAlphanumeric(code[cursor.*]) or code[cursor.*] == '_') cursor.* += 1 else break;
     }
+    return code[start..cursor.*];
+}
+
+// Numetric Literal: 0x1A, 0o1A, 0b1A, 1, 2, 444, 1_000, 1.5
+// Boolean Literal: true, false
+// String Literal: "aaaxxx", 'hello'
+// Null Literal: null
+// Undefined Literal: undefined
+// Regex Literal: /abc/ig
+fn peek_literal(code: []const u8, cursor: usize) bool {
+    // boundary check
+    if (cursor + 1 > code.len) return false;
+    if (std.mem.startsWith(u8, code[cursor..], "0x") or std.mem.startsWith(u8, code[cursor..], "0o") or std.mem.startsWith(u8, code[cursor..], "0b")) {
+        // binary literal, octal literal, hexadecimal literal
+        return true;
+    } else if (std.ascii.isDigit(code[cursor])) {
+        // number literal
+        return true;
+    }
+    if (code[cursor] == '"' or code[cursor] == '\'') {
+        // string literal
+        return true;
+    } else if (std.mem.startsWith(u8, code[cursor..], "true") or std.mem.startsWith(u8, code[cursor..], "false")) {
+        // boolean literal
+        return true;
+    } else if (std.mem.startsWith(u8, code[cursor..], "null")) {
+        // null literal
+        return true;
+    } else if (std.mem.startsWith(u8, code[cursor..], "undefined")) {
+        // undefined literal
+        return true;
+    } else if (code[cursor] == '/') {
+        // regex literal
+        return true;
+    }
+    return false;
+}
+
+fn consume_literal(code: []const u8, cursor: *usize) []const u8 {
+    const start = cursor.*;
+    if (std.mem.startsWith(u8, code[cursor.*..], "0b")) {
+        cursor.* += 2;
+        while (cursor.* < code.len) {
+            if (code[cursor.*] == '1' or code[cursor.*] == '0') cursor.* += 1 else break;
+        }
+    } else if (std.mem.startsWith(u8, code[cursor.*..], "0o")) {
+        cursor.* += 2;
+        while (cursor.* < code.len) {
+            switch (code[cursor.*]) {
+                '0'...'7' => cursor.* += 1,
+                else => break,
+            }
+        }
+    } else if (std.mem.startsWith(u8, code[cursor.*..], "0x")) {
+        cursor.* += 2;
+        while (cursor.* < code.len) {
+            if (std.ascii.isHex(code[cursor.*])) cursor.* += 1 else break;
+        }
+    } else if (std.ascii.isDigit(code[cursor.*])) {
+        while (cursor.* < code.len) {
+            if (std.ascii.isDigit(code[cursor.*]) or code[cursor.*] == '_' or code[cursor.*] == '.') cursor.* += 1 else break;
+        }
+    } else if (code[cursor.*] == '"' or code[cursor.*] == '\'') {
+        cursor.* += 1;
+        while (cursor.* < code.len) {
+            if (code[cursor.*] == '"' or code[cursor.*] == '\'') break else cursor.* += 1;
+        }
+        cursor.* += 1;
+    } else if (std.mem.startsWith(u8, code[cursor.*..], "true")) {
+        cursor.* += 4;
+    } else if (std.mem.startsWith(u8, code[cursor.*..], "false")) {
+        cursor.* += 5;
+    } else if (std.mem.startsWith(u8, code[cursor.*..], "null")) {
+        cursor.* += 4;
+    } else if (std.mem.startsWith(u8, code[cursor.*..], "undefined")) {
+        cursor.* += 9;
+    } else if (code[cursor.*] == '/') {
+        // regex literal
+        cursor.* += 1;
+        while (cursor.* < code.len) {
+            cursor.* += 1;
+            if (code[cursor.*] == '/') {
+                if (code[cursor.* + 1] == 'i' or code[cursor.* + 1] == 'g' or code[cursor.* + 1] == 'm') {
+                    cursor.* += 1;
+                    while (cursor.* < code.len) {
+                        switch (code[cursor.*]) {
+                            'i', 'g', 'm' => cursor.* += 1,
+                            else => break,
+                        }
+                    }
+                }
+                break;
+            }
+        }
+    }
+
+    std.debug.print("consumed literal: {s}\n", .{code[start..cursor.*]});
+
     return code[start..cursor.*];
 }
 
@@ -496,6 +595,106 @@ fn strip_whitespace_comments(code: []const u8, cursor: usize) usize {
         break;
     }
     return i;
+}
+
+// pass all code starting at cursor position
+// a standalone pass on code that means movement of a cursor from 0 to code.len
+fn strip_typescript(allocator: std.mem.Allocator, code: []const u8, cursor: usize) ![]u8 {
+    var js_code = try std.ArrayList(u8).initCapacity(allocator, 1024 * 1024);
+    var i = cursor;
+    while (i < code.len) {
+        if (std.ascii.isWhitespace(code[i])) {
+            js_code.append(allocator, code[i]) catch unreachable;
+            i += 1;
+            continue;
+        }
+        if (peek(code, i, "//")) {
+            var cursor_inline_comment = i;
+            while (cursor_inline_comment < code.len and code[cursor_inline_comment] != '\n') {
+                js_code.append(allocator, code[i]) catch unreachable;
+                cursor_inline_comment += 1;
+            }
+            i = cursor_inline_comment;
+            continue;
+        }
+        if (peek(code, i, "/*")) {
+            var cursor_block_comment = i;
+            while (cursor_block_comment < code.len and !peek(code, cursor_block_comment, "*/")) {
+                js_code.append(allocator, code[cursor_block_comment]) catch unreachable;
+                cursor_block_comment += 1;
+            }
+            i = cursor_block_comment;
+            continue;
+        }
+        // a whole export declaration
+        if (peek(code, i, "export")) {
+            js_code.appendSlice(allocator, code[i .. i + 6]) catch unreachable;
+            i += 6;
+            // try Declaration - LexicalDeclaration, such as `export const a: number = 1 as number;`;
+            var cursor_lexical_declaration = i;
+            while (cursor_lexical_declaration < code.len) {
+                if (peek(code, cursor_lexical_declaration, "const")) {
+                    js_code.appendSlice(allocator, code[cursor_lexical_declaration .. cursor_lexical_declaration + 5]) catch unreachable;
+                    cursor_lexical_declaration += 5;
+                    // consume one single whitepsace
+                    js_code.append(allocator, code[cursor_lexical_declaration]) catch unreachable;
+                    cursor_lexical_declaration += 1;
+                    // peek at current cursor position for an identifier
+                    if (peek_identifier(code, cursor_lexical_declaration)) {
+                        js_code.appendSlice(allocator, consume_identifier(code, &cursor_lexical_declaration)) catch unreachable;
+                        var cursor_typing = cursor_lexical_declaration;
+                        while (cursor_typing < code.len) {
+                            if (peek(code, cursor_typing, "=")) {
+                                js_code.appendSlice(allocator, "=") catch unreachable;
+                                cursor_typing += 1;
+                                break;
+                            }
+                            cursor_typing += 1;
+                        }
+                        cursor_lexical_declaration = cursor_typing;
+                        // consume one single whitespace
+                        js_code.append(allocator, code[cursor_lexical_declaration]) catch unreachable;
+                        cursor_lexical_declaration += 1;
+                        if (peek_literal(code, cursor_lexical_declaration)) {
+                            js_code.appendSlice(allocator, consume_literal(code, &cursor_lexical_declaration)) catch unreachable;
+                            cursor_typing = cursor_lexical_declaration;
+                            while (cursor_typing < code.len) {
+                                if (peek(code, cursor_typing, ";")) {
+                                    js_code.appendSlice(allocator, ";") catch unreachable;
+                                    cursor_typing += 1;
+                                    break;
+                                }
+                                cursor_typing += 1;
+                            }
+                            cursor_lexical_declaration = cursor_typing;
+                        } else {
+                            // if cannot peek number literal, then consume the rest of the line
+                            var cursor_end_of_line = cursor_lexical_declaration;
+                            while (cursor_end_of_line < code.len and code[cursor_end_of_line] != '\n') cursor_end_of_line += 1;
+                            js_code.appendSlice(allocator, code[cursor_lexical_declaration..cursor_end_of_line]) catch unreachable;
+                            cursor_lexical_declaration = cursor_end_of_line;
+                        }
+                    } else {
+                        // if cannot peek identifier, then consume the rest of the line
+                        var cursor_end_of_line = cursor_lexical_declaration;
+                        while (cursor_end_of_line < code.len and code[cursor_end_of_line] != '\n') cursor_end_of_line += 1;
+                        js_code.appendSlice(allocator, code[cursor_lexical_declaration..cursor_end_of_line]) catch unreachable;
+                        cursor_lexical_declaration = cursor_end_of_line;
+                    }
+                    continue;
+                }
+                js_code.append(allocator, code[cursor_lexical_declaration]) catch unreachable;
+                cursor_lexical_declaration += 1;
+            }
+            i = cursor_lexical_declaration;
+            continue;
+        }
+
+        js_code.append(allocator, code[i]) catch unreachable;
+        i += 1;
+    }
+    std.debug.print("js_code; {s}", .{js_code.items});
+    return js_code.toOwnedSlice(allocator);
 }
 
 test "module_linkage" {
