@@ -342,7 +342,9 @@ fn visit_node(node: *Node) !void {
             try linked_code.appendSlice(state.allocator, ";\n");
         }
     }
-    try linked_code.appendSlice(node.allocator, try strip_typescript(node.allocator, code, end_of_linking_cursor));
+    const stripped_code = try strip_typescript(node.allocator, code, end_of_linking_cursor);
+    defer node.allocator.free(stripped_code);
+    try linked_code.appendSlice(node.allocator, stripped_code);
     try state.output.appendSlice(node.allocator, linked_code.items);
 }
 
@@ -559,9 +561,6 @@ fn consume_literal(code: []const u8, cursor: *usize) []const u8 {
             }
         }
     }
-
-    std.debug.print("consumed literal: {s}\n", .{code[start..cursor.*]});
-
     return code[start..cursor.*];
 }
 
@@ -693,7 +692,6 @@ fn strip_typescript(allocator: std.mem.Allocator, code: []const u8, cursor: usiz
         js_code.append(allocator, code[i]) catch unreachable;
         i += 1;
     }
-    std.debug.print("js_code; {s}", .{js_code.items});
     return js_code.toOwnedSlice(allocator);
 }
 

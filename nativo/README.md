@@ -5,6 +5,11 @@ Nativo is a frontier build tool for any browser application with the Browser Nat
 
 Nativo has several advantages you may take attention to:
 - Extremely fast linking, unidirectional linkage is done.
+  - module size is up to 1MiB for linkage
+  - 1KiB import statements in one single module
+  - Nested imported can be resolved recursively in post-order traverse
+  - NamedImports and ImportedBinding can be resolved.
 - Error Tolerance by default
 - [WIP]Auto-Strip TypeScript Syntax
+  - Typing notation for multiple literals in LexicalDeclaration
 - [WIP]Support DCE
