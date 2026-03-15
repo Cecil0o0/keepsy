@@ -667,7 +667,7 @@ fn strip_typescript(allocator: std.mem.Allocator, code: []const u8, cursor: usiz
                             }
                             cursor_lexical_declaration = cursor_typing;
                         } else {
-                            // if cannot peek number literal, then consume the rest of the line
+                            // if cannot peek literal, then consume the rest of the line
                             var cursor_end_of_line = cursor_lexical_declaration;
                             while (cursor_end_of_line < code.len and code[cursor_end_of_line] != '\n') cursor_end_of_line += 1;
                             js_code.appendSlice(allocator, code[cursor_lexical_declaration..cursor_end_of_line]) catch unreachable;
@@ -696,8 +696,11 @@ fn strip_typescript(allocator: std.mem.Allocator, code: []const u8, cursor: usiz
 }
 
 test "module_linkage" {
+    const start = std.time.milliTimestamp();
     var entries = [_]Module{Module{ .specifier = "./usecase/main.ts", .parent_path = "./module-linker.zig" }};
     _ = try link_modules(std.testing.allocator, &entries);
+    const end = std.time.milliTimestamp();
+    std.debug.print("link_modules: {} ms\n", .{end - start});
 }
 
 fn print_node(node: *Node) !void {
