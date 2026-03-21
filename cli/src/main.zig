@@ -13,6 +13,12 @@ pub fn main() !void {
     const args = try std.process.argsAlloc(gpa);
     defer std.process.argsFree(gpa, args);
 
+    if (args.len < 2) {
+        try cli.printLarkCharacters();
+        std.debug.print("\nUsage: {s} <command> \n  version\n  file\n  http\n", .{args[0]});
+        std.process.exit(0);
+    }
+
     if (std.mem.eql(u8, args[1], "version")) {
         std.debug.print("0.0.1\n", .{});
     }
@@ -34,13 +40,4 @@ pub fn main() !void {
         std.debug.print("http response status: {d}\n", .{result.status});
         std.debug.print("http response body: {s}\n", .{writer.buffered()});
     }
-    try cli.bufferedPrint();
-}
-
-test "simple test" {
-    const gpa = std.testing.allocator;
-    var list: std.ArrayList(i32) = .empty;
-    defer list.deinit(gpa); // Try commenting this out and see if zig detects the memory leak!
-    try list.append(gpa, 42);
-    try std.testing.expectEqual(@as(i32, 42), list.pop());
 }
