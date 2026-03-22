@@ -30,14 +30,16 @@ pub fn main() !void {
     if (std.mem.eql(u8, args[1], "http")) {
         var client = std.http.Client{ .allocator = gpa };
         defer client.deinit();
-        var buffer: [4096]u8 = undefined;
+        var buffer: [60000]u8 = undefined;
         var writer = std.io.Writer.fixed(&buffer);
         const result = try client.fetch(.{
             .method = .GET,
-            .location = .{ .url = "https://baidu.com" },
+            .location = .{ .url = "https://bytedance.com/zh/products" },
             .response_writer = &writer,
         });
         std.debug.print("http response status: {d}\n", .{result.status});
-        std.debug.print("http response body: {s}\n", .{writer.buffered()});
+        const reponse_buffered = writer.buffered();
+        std.debug.print("http response body length: {d}\n", .{reponse_buffered.len});
+        std.debug.print("http response body: {s}\n", .{reponse_buffered});
     }
 }
