@@ -42,4 +42,8 @@ pub fn main() !void {
         std.debug.print("http response body length: {d}\n", .{reponse_buffered.len});
         std.debug.print("http response body: {s}\n", .{reponse_buffered});
     }
+
+    if (std.mem.eql(u8, args[1], "env")) {
+        try cli.printEnv(gpa);
+    }
 }
