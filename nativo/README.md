@@ -9,7 +9,7 @@ Nativo has several advantages you may take attention to:
   - Nested imported can be resolved recursively in post-order traverse.
   - NamedImports and ImportedBinding can be resolved.
   - all non-exported statements are included and remained by default, code delimination when support DCE.
-- [WIP]symbol collision when modules have been unwrapped
+- [WIP]Handling symbol collision when modules have been unwrapped
 - [WIP]Auto-Strip TypeScript Syntax
   - Typing notation for multiple literals in LexicalDeclaration
 - [WIP]Support DCE

@@ -45,6 +45,21 @@ export const lexDecl18: Map<string, number> = new Map();
 export const lexDecl19: Set<number> = new Set();
 export const lexDecl20: ArrayBuffer = new ArrayBuffer(8);
 
+export let config: { apiUrl: string; timeout: number } = {
+  apiUrl: 'https://api.example.com',
+  timeout: 5000
+};
+export let count: number = 0;
+export let x: number = 10, y: number = 20, z: number = 30;
+export let dom: HTMLDivElement = document.createElement("div");
+
 export const func: Function = () => {
     return "hello";
+};
+
+export let classDecl: any = class ClassDecl {
+    constructor(public name: string) {}
+    method(): string {
+        return `Hello, ${this.name}!`;
+    }
 };

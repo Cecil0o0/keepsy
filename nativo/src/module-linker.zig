@@ -100,7 +100,19 @@ pub fn link_modules(allocator: std.mem.Allocator, entries: *[1]Module) !void {
 
     for (entries) |module| {
         var buf_parent: [1024]u8 = undefined;
-        const path = try resolve(allocator, module.specifier, try std.fs.realpath(module.parent_path, &buf_parent));
+        const path = try resolve(allocator, module.specifier, std.fs.realpath(module.parent_path, &buf_parent) catch |err| {
+            switch (err) {
+                error.FileNotFound => {
+                    const cwd = try std.fs.cwd().realpathAlloc(allocator, ".");
+                    defer allocator.free(cwd);
+                    std.debug.print("CWD: {s}, File not found: {s}, {s}\n", .{ cwd, module.specifier, module.parent_path });
+                    @panic("Module not resolved.");
+                },
+                else => {
+                    return err;
+                },
+            }
+        });
         const code = try std.fs.cwd().readFileAlloc(state.allocator, path, std.math.maxInt(usize));
         // code will be freed by tree cleanup via freeNode
 
@@ -632,9 +644,14 @@ fn strip_typescript(allocator: std.mem.Allocator, code: []const u8, cursor: usiz
             // try Declaration - LexicalDeclaration, such as `export const a: number = 1 as number;`;
             var cursor_lexical_declaration = i;
             while (cursor_lexical_declaration < code.len) {
-                if (peek(code, cursor_lexical_declaration, "const")) {
-                    js_code.appendSlice(allocator, code[cursor_lexical_declaration .. cursor_lexical_declaration + 5]) catch unreachable;
-                    cursor_lexical_declaration += 5;
+                if (peek(code, cursor_lexical_declaration, "const") or peek(code, cursor_lexical_declaration, "let")) {
+                    if (peek(code, cursor_lexical_declaration, "const")) {
+                        js_code.appendSlice(allocator, code[cursor_lexical_declaration .. cursor_lexical_declaration + 5]) catch unreachable;
+                        cursor_lexical_declaration += 5;
+                    } else {
+                        js_code.appendSlice(allocator, code[cursor_lexical_declaration .. cursor_lexical_declaration + 3]) catch unreachable;
+                        cursor_lexical_declaration += 3;
+                    }
                     // consume one single whitepsace
                     js_code.append(allocator, code[cursor_lexical_declaration]) catch unreachable;
                     cursor_lexical_declaration += 1;
@@ -650,6 +667,7 @@ fn strip_typescript(allocator: std.mem.Allocator, code: []const u8, cursor: usiz
                             }
                             cursor_typing += 1;
                         }
+                        if (cursor_typing == code.len) break;
                         cursor_lexical_declaration = cursor_typing;
                         // consume one single whitespace
                         js_code.append(allocator, code[cursor_lexical_declaration]) catch unreachable;
@@ -697,6 +715,8 @@ fn strip_typescript(allocator: std.mem.Allocator, code: []const u8, cursor: usiz
 
 test "module_linkage" {
     const start = std.time.milliTimestamp();
+    const dir = try std.fs.cwd().openDir("nativo/src", .{});
+    _ = try dir.setAsCwd();
     var entries = [_]Module{Module{ .specifier = "./usecase/main.ts", .parent_path = "./module-linker.zig" }};
     _ = try link_modules(std.testing.allocator, &entries);
     const end = std.time.milliTimestamp();
@@ -710,6 +730,8 @@ fn free_node(node: *Node) !void {
     node.deinit();
 }
 test "build_module_tree" {
+    const dir = try std.fs.cwd().openDir("nativo/src", .{});
+    _ = try dir.setAsCwd();
     var module = Module{ .specifier = "./usecase/main.ts", .parent_path = "./module-linker.zig" };
     module.resolved_path = try resolve(std.testing.allocator, module.specifier, module.parent_path);
     module.raw_code = try std.fs.cwd().readFileAlloc(std.testing.allocator, module.resolved_path.?, std.math.maxInt(usize));
