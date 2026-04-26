@@ -660,8 +660,9 @@ fn strip_typescript(allocator: std.mem.Allocator, code: []const u8, cursor: usiz
                         js_code.appendSlice(allocator, consume_identifier(code, &cursor_lexical_declaration)) catch unreachable;
                         var cursor_typing = cursor_lexical_declaration;
                         while (cursor_typing < code.len) {
+                            // strip typing until encounter `=`, use peek by default.
                             if (peek(code, cursor_typing, "=")) {
-                                js_code.appendSlice(allocator, "=") catch unreachable;
+                                js_code.appendSlice(allocator, " =") catch unreachable;
                                 cursor_typing += 1;
                                 break;
                             }
