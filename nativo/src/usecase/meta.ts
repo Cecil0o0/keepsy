@@ -57,8 +57,10 @@ export const func: Function = () => {
     return "hello";
 };
 
-export let classDecl: any = class ClassDecl {
-    constructor(public name: string) {}
+export let classDecl: any = class ClassDecl extends HTMLElement {
+    constructor(public name: string) {
+        super()
+    }
     method(): string {
         return `Hello, ${this.name}!`;
     }
